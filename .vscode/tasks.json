@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run JavaFX Game",
+      "type": "shell",
+      "command": ".\\mvnw.cmd javafx:run",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "options": {
+        "env": {
+          "JAVA_HOME": "C:\\Program Files\\Java\\jdk-21.0.12"
+        },
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
