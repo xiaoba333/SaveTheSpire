@@ -2,9 +2,11 @@ package com.roguelike.dungeon.game.battle;
 
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardEffectContext;
+import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -33,6 +35,9 @@ public class Combat {
     private boolean playerTurn;
     private boolean finished;
     private String resultText;
+    private String resultCode;
+    private int turnNumber;
+    private final List<String> newLogs = new ArrayList<>();
 
     public Combat(Consumer<String> logger) {
         this.logger = logger;
@@ -60,6 +65,22 @@ public class Combat {
         return energy;
     }
 
+    public int getPlayerMaxHp() {
+        return PLAYER_MAX_HP;
+    }
+
+    public int getPlayerMaxEnergy() {
+        return PLAYER_MAX_ENERGY;
+    }
+
+    public int getMonsterMaxHp() {
+        return MONSTER_MAX_HP;
+    }
+
+    public int getTurnNumber() {
+        return turnNumber;
+    }
+
     public int getDrawPileSize() {
         return piles.getDrawPileSize();
     }
@@ -84,7 +105,26 @@ public class Combat {
         return resultText;
     }
 
-    public List<Card> getHand() {
+    /**
+     * 返回协议层可直接使用的胜负结果。
+     *
+     * @return "VICTORY"、"DEFEAT" 或 null
+     */
+    public String getResult() {
+        return resultCode;
+    }
+
+    /**
+     * 返回当前战斗阶段。HTTP 接口采用同步结束回合，因此不需要暴露 MONSTER_TURN。
+     */
+    public String getPhase() {
+        if (resultCode != null) {
+            return resultCode;
+        }
+        return "PLAYER_TURN";
+    }
+
+    public List<CardInstance> getHand() {
         return piles.getHand();
     }
 
@@ -96,23 +136,69 @@ public class Combat {
         return monsterWillAttack ? "下回合：攻击 " + MONSTER_ATTACK : "下回合：防御 +" + MONSTER_BLOCK;
     }
 
+    /** 结构化怪物意图，供 HTTP 层序列化为 JSON。 */
+    public Intent getMonsterIntentInfo() {
+        if (finished) {
+            return null;
+        }
+        return monsterWillAttack
+                ? new Intent("ATTACK", MONSTER_ATTACK)
+                : new Intent("DEFEND", MONSTER_BLOCK);
+    }
+
+    /**
+     * 取走并清空本次操作产生的增量日志。
+     */
+    public List<String> drainNewLogs() {
+        List<String> snapshot = new ArrayList<>(newLogs);
+        newLogs.clear();
+        return List.copyOf(snapshot);
+    }
+
     /**
      * 点击手牌时调用。只能在玩家回合打出。
      */
-    public void playCard(int handIndex) {
-        if (!isPlayerTurn() || handIndex < 0 || handIndex >= piles.getHandSize()) {
-            return;
+    public PlayCardResult playCard(int handIndex) {
+        if (finished) {
+            return PlayCardResult.BATTLE_FINISHED;
         }
+        if (!playerTurn) {
+            return PlayCardResult.NOT_PLAYER_TURN;
+        }
+        if (handIndex < 0 || handIndex >= piles.getHandSize()) {
+            return PlayCardResult.INVALID_CARD;
+        }
+        return playCardInternal(handIndex);
+    }
 
-        Card card = piles.peekHand(handIndex);
+    /**
+     * 供 HTTP 等外部调用方使用的出牌入口，按牌实例 id 出牌。
+     */
+    public PlayCardResult playCard(String cardInstanceId) {
+        if (finished) {
+            return PlayCardResult.BATTLE_FINISHED;
+        }
+        if (!playerTurn) {
+            return PlayCardResult.NOT_PLAYER_TURN;
+        }
+        int handIndex = piles.findHandIndex(cardInstanceId);
+        if (handIndex < 0) {
+            return PlayCardResult.INVALID_CARD;
+        }
+        return playCardInternal(handIndex);
+    }
+
+    private PlayCardResult playCardInternal(int handIndex) {
+        CardInstance instance = piles.peekHand(handIndex);
+        Card card = instance.card();
         if (!card.playable()) {
             log("「" + card.name() + "」无法打出。");
-            return;
+            return PlayCardResult.CARD_NOT_PLAYABLE;
         }
 
         if (!tryConsumeEnergy(card.cost())) {
             log("能量不足，无法打出「" + card.name() + "」。");
-            return;
+            return PlayCardResult.NOT_ENOUGH_ENERGY;
         }
 
         piles.removeFromHand(handIndex);
@@ -120,12 +206,13 @@ public class Combat {
         card.effect().apply(new CombatCardEffectContext());
 
         if (card.exhausts()) {
-            piles.sendToExhaust(card);
+            piles.sendToExhaust(instance);
             log("「" + card.name() + "」已消耗。");
         } else {
-            piles.sendToDiscard(card);
+            piles.sendToDiscard(instance);
         }
         checkFinished();
+        return PlayCardResult.SUCCESS;
     }
 
     /**
@@ -148,6 +235,7 @@ public class Combat {
             return;
         }
 
+        turnNumber++;
         beginPlayerTurn();
     }
 
@@ -160,6 +248,9 @@ public class Combat {
         monsterWillAttack = true;
         finished = false;
         resultText = "";
+        resultCode = null;
+        turnNumber = 1;
+        newLogs.clear();
         piles.initialize(CardLibrary.startingDeck());
 
         log("战斗开始。玩家 HP " + playerHp + "，怪物 HP " + monsterHp + "。");
@@ -230,17 +321,38 @@ public class Combat {
             finished = true;
             playerTurn = false;
             resultText = "胜利：怪物血量已归零。";
+            resultCode = "VICTORY";
             log(resultText);
         } else if (playerHp <= 0) {
             finished = true;
             playerTurn = false;
             resultText = "失败：玩家血量已归零。";
+            resultCode = "DEFEAT";
             log(resultText);
         }
     }
 
     private void log(String line) {
         logger.accept(line);
+        newLogs.add(line);
+    }
+
+    /**
+     * 怪物下一回合意图。
+     */
+    public record Intent(String type, int value) {
+    }
+
+    /**
+     * 出牌结果。HTTP 层可以直接根据此枚举映射错误码。
+     */
+    public enum PlayCardResult {
+        SUCCESS,
+        NOT_PLAYER_TURN,
+        INVALID_CARD,
+        NOT_ENOUGH_ENERGY,
+        CARD_NOT_PLAYABLE,
+        BATTLE_FINISHED
     }
 
     /**
