@@ -1,13 +1,11 @@
 package com.roguelike.dungeon.game.deck;
 
 import com.roguelike.dungeon.game.card.Card;
-import com.roguelike.dungeon.game.card.CardInstance;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -17,10 +15,10 @@ public final class CardPiles {
 
     private final Random random;
     private final Consumer<String> logger;
-    private final List<CardInstance> drawPile = new ArrayList<>();
-    private final List<CardInstance> hand = new ArrayList<>();
-    private final List<CardInstance> discardPile = new ArrayList<>();
-    private final List<CardInstance> exhaustPile = new ArrayList<>();
+    private final List<Card> drawPile = new ArrayList<>();
+    private final List<Card> hand = new ArrayList<>();
+    private final List<Card> discardPile = new ArrayList<>();
+    private final List<Card> exhaustPile = new ArrayList<>();
 
     public CardPiles(Consumer<String> logger) {
         this(logger, new Random());
@@ -37,9 +35,7 @@ public final class CardPiles {
         hand.clear();
         discardPile.clear();
         exhaustPile.clear();
-        for (Card card : cards) {
-            drawPile.add(new CardInstance(UUID.randomUUID().toString(), card));
-        }
+        drawPile.addAll(cards);
         Collections.shuffle(drawPile, random);
     }
 
@@ -48,7 +44,7 @@ public final class CardPiles {
      *
      * @return 本次实际抽到的手牌快照
      */
-    public List<CardInstance> drawToHandSize(int targetHandSize) {
+    public List<Card> drawToHandSize(int targetHandSize) {
         return draw(Math.max(0, targetHandSize - hand.size()));
     }
 
@@ -57,12 +53,12 @@ public final class CardPiles {
      *
      * @return 本次实际抽到的牌，数量可能少于请求值
      */
-    public List<CardInstance> draw(int count) {
+    public List<Card> draw(int count) {
         if (count <= 0) {
             return List.of();
         }
 
-        List<CardInstance> drawn = new ArrayList<>();
+        List<Card> drawn = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             if (drawPile.isEmpty()) {
                 if (discardPile.isEmpty()) {
@@ -72,9 +68,9 @@ public final class CardPiles {
                 logger.accept("抽牌堆为空，弃牌堆洗回抽牌堆。");
             }
 
-            CardInstance instance = drawPile.remove(drawPile.size() - 1);
-            hand.add(instance);
-            drawn.add(instance);
+            Card card = drawPile.remove(drawPile.size() - 1);
+            hand.add(card);
+            drawn.add(card);
         }
         return List.copyOf(drawn);
     }
@@ -86,38 +82,28 @@ public final class CardPiles {
     }
 
     /** 从手牌中取出一张牌，交由出牌流程处理。 */
-    public CardInstance removeFromHand(int handIndex) {
+    public Card removeFromHand(int handIndex) {
         return hand.remove(handIndex);
     }
 
     /** 查看手牌中指定位置的牌，不改变牌堆状态。 */
-    public CardInstance peekHand(int handIndex) {
+    public Card peekHand(int handIndex) {
         return hand.get(handIndex);
     }
 
-    /** 根据实例 id 查找手牌下标；找不到返回 -1。 */
-    public int findHandIndex(String instanceId) {
-        for (int i = 0; i < hand.size(); i++) {
-            if (hand.get(i).id().equals(instanceId)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     /** 将打出的普通牌放入弃牌堆。 */
-    public void sendToDiscard(CardInstance instance) {
-        discardPile.add(instance);
+    public void sendToDiscard(Card card) {
+        discardPile.add(card);
     }
 
     /** 将带有「消耗」效果的牌放入消耗堆。 */
-    public void sendToExhaust(CardInstance instance) {
-        exhaustPile.add(instance);
+    public void sendToExhaust(Card card) {
+        exhaustPile.add(card);
     }
 
     /** 把一张牌放到抽牌堆顶部。 */
-    public void putOnTopOfDrawPile(CardInstance instance) {
-        drawPile.add(instance);
+    public void putOnTopOfDrawPile(Card card) {
+        drawPile.add(card);
     }
 
     /** 将弃牌堆洗回抽牌堆。 */
@@ -127,19 +113,19 @@ public final class CardPiles {
         Collections.shuffle(drawPile, random);
     }
 
-    public List<CardInstance> getHand() {
+    public List<Card> getHand() {
         return List.copyOf(hand);
     }
 
-    public List<CardInstance> getDrawPile() {
+    public List<Card> getDrawPile() {
         return List.copyOf(drawPile);
     }
 
-    public List<CardInstance> getDiscardPile() {
+    public List<Card> getDiscardPile() {
         return List.copyOf(discardPile);
     }
 
-    public List<CardInstance> getExhaustPile() {
+    public List<Card> getExhaustPile() {
         return List.copyOf(exhaustPile);
     }
 

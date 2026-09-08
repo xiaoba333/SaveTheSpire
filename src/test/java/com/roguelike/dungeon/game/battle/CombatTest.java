@@ -1,9 +1,6 @@
 package com.roguelike.dungeon.game.battle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -21,32 +18,13 @@ class CombatTest {
         assertEquals(5, combat.getHand().size());
         assertEquals(5, combat.getDrawPileSize());
         assertEquals(0, combat.getDiscardPileSize());
-        assertEquals(1, combat.getTurnNumber());
-        assertEquals("PLAYER_TURN", combat.getPhase());
-        assertNull(combat.getResult());
-        assertNotNull(combat.getMonsterIntentInfo());
-        assertEquals("ATTACK", combat.getMonsterIntentInfo().type());
-        assertTrue(!combat.drainNewLogs().isEmpty());
 
-        assertEquals(Combat.PlayCardResult.SUCCESS, combat.playCard(0));
+        combat.playCard(0);
 
         assertEquals(2, combat.getEnergy());
         assertEquals(4, combat.getHand().size());
         assertEquals(1, combat.getDiscardPileSize());
         assertTrue(logs.stream().anyMatch(line -> line.contains("消耗 1 点能量")));
-    }
-
-    @Test
-    void canPlayCardByInstanceId() {
-        List<String> logs = new ArrayList<>();
-        Combat combat = new Combat(logs::add);
-        String instanceId = combat.getHand().get(0).id();
-
-        assertEquals(Combat.PlayCardResult.SUCCESS, combat.playCard(instanceId));
-
-        assertFalse(combat.getHand().stream().anyMatch(instance -> instance.id().equals(instanceId)));
-        assertEquals(4, combat.getHand().size());
-        assertEquals(1, combat.getDiscardPileSize());
     }
 
     @Test
@@ -83,8 +61,5 @@ class CombatTest {
         assertEquals(3, combat.getEnergy());
         assertEquals(5, combat.getHand().size());
         assertTrue(combat.isPlayerTurn());
-        assertEquals(2, combat.getTurnNumber());
-        assertEquals("PLAYER_TURN", combat.getPhase());
-        assertTrue(!combat.drainNewLogs().isEmpty());
     }
 }

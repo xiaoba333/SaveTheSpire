@@ -1,6 +1,6 @@
 package com.roguelike.dungeon.game.deck;
 
-import com.roguelike.dungeon.game.card.CardInstance;
+import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardLibrary;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,7 +45,7 @@ class CardPilesTest {
         piles.initialize(List.of(CardLibrary.STRIKE));
         piles.draw(1);
 
-        CardInstance played = piles.removeFromHand(0);
+        Card played = piles.removeFromHand(0);
         piles.sendToExhaust(played);
 
         assertEquals(0, piles.getHandSize());

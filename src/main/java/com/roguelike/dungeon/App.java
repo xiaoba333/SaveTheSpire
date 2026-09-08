@@ -6,7 +6,6 @@ import java.util.List;
 
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.card.Card;
-import com.roguelike.dungeon.game.card.CardInstance;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -137,8 +136,7 @@ public class App extends Application {
 
         handBox.getChildren().clear();
         for (int i = 0; i < combat.getHand().size(); i++) {
-            CardInstance instance = combat.getHand().get(i);
-            Card card = instance.card();
+            Card card = combat.getHand().get(i);
             Button cardButton = new Button(card.label());
             cardButton.setTooltip(new Tooltip(card.description()));
             final int index = i;
