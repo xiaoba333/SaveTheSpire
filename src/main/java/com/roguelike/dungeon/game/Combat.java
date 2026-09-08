@@ -71,16 +71,6 @@ public class Combat {
         return Collections.unmodifiableList(hand);
     }
 
-    /** 抽牌堆，仅供调试界面查看。下一张在列表末尾。 */
-    public List<Card> getDeck() {
-        return Collections.unmodifiableList(deck);
-    }
-
-    /** 弃牌堆，仅供调试界面查看。最近弃入的在列表末尾。 */
-    public List<Card> getDiscard() {
-        return Collections.unmodifiableList(discard);
-    }
-
     /** 界面展示怪物下一动，方便看清攻防循环。 */
     public String getMonsterIntent() {
         if (finished) {
