@@ -130,12 +130,16 @@ public class Combat {
 
     /** 抽牌堆快照，仅供调试界面查看。下一张在列表末尾。 */
     public List<Card> getDrawPile() {
-        return piles.getDrawPile();
+        return piles.getDrawPile().stream()
+                .map(CardInstance::card)
+                .toList();
     }
 
     /** 弃牌堆快照，仅供调试界面查看。最近弃入的在列表末尾。 */
     public List<Card> getDiscardPile() {
-        return piles.getDiscardPile();
+        return piles.getDiscardPile().stream()
+                .map(CardInstance::card)
+                .toList();
     }
 
     /** 界面展示怪物下一动，方便看清攻防循环。 */
