@@ -1,12 +1,15 @@
-package com.roguelike.dungeon.game;
+package com.roguelike.dungeon.game.battle;
 
-import java.util.ArrayList;
-import java.util.Collections;
+import com.roguelike.dungeon.game.card.Card;
+import com.roguelike.dungeon.game.card.CardEffectContext;
+import com.roguelike.dungeon.game.card.CardLibrary;
+import com.roguelike.dungeon.game.deck.CardPiles;
+
 import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 杀戮尖塔风格的最小战斗规则：抽牌、出牌、结束回合、怪物攻防交替、护盾抵伤。
+ * 杀戮尖塔风格的最小战斗规则：抽牌、能量、出牌、结束回合、怪物攻防交替、护盾抵伤。
  */
 public class Combat {
 
@@ -15,27 +18,25 @@ public class Combat {
     public static final int MONSTER_ATTACK = 10;
     public static final int MONSTER_BLOCK = 10;
     public static final int HAND_SIZE = 5;
-    public static final int DECK_ATTACK_COUNT = 5;
-    public static final int DECK_DEFEND_COUNT = 5;
+    public static final int PLAYER_MAX_ENERGY = 3;
 
     private final Consumer<String> logger;
+    private final CardPiles piles;
 
     private int playerHp;
     private int playerBlock;
     private int monsterHp;
     private int monsterBlock;
+    private int energy;
     /** true 表示怪物下一次行动是攻击，false 表示给自己叠护盾。 */
     private boolean monsterWillAttack;
     private boolean playerTurn;
     private boolean finished;
     private String resultText;
 
-    private final List<Card> deck = new ArrayList<>();
-    private final List<Card> hand = new ArrayList<>();
-    private final List<Card> discard = new ArrayList<>();
-
     public Combat(Consumer<String> logger) {
         this.logger = logger;
+        this.piles = new CardPiles(logger);
         startNewFight();
     }
 
@@ -55,6 +56,22 @@ public class Combat {
         return monsterBlock;
     }
 
+    public int getEnergy() {
+        return energy;
+    }
+
+    public int getDrawPileSize() {
+        return piles.getDrawPileSize();
+    }
+
+    public int getDiscardPileSize() {
+        return piles.getDiscardPileSize();
+    }
+
+    public int getExhaustPileSize() {
+        return piles.getExhaustPileSize();
+    }
+
     public boolean isPlayerTurn() {
         return playerTurn && !finished;
     }
@@ -68,7 +85,7 @@ public class Combat {
     }
 
     public List<Card> getHand() {
-        return Collections.unmodifiableList(hand);
+        return piles.getHand();
     }
 
     /** 界面展示怪物下一动，方便看清攻防循环。 */
@@ -83,21 +100,31 @@ public class Combat {
      * 点击手牌时调用。只能在玩家回合打出。
      */
     public void playCard(int handIndex) {
-        if (!isPlayerTurn() || handIndex < 0 || handIndex >= hand.size()) {
+        if (!isPlayerTurn() || handIndex < 0 || handIndex >= piles.getHandSize()) {
             return;
         }
 
-        Card card = hand.remove(handIndex);
-        discard.add(card);
-
-        if (card.type() == CardType.ATTACK) {
-            int dealt = applyDamage(true, card.type().value());
-            log("玩家打出「" + card.label() + "」，对怪物造成 " + dealt + " 点伤害。");
-        } else {
-            playerBlock += card.type().value();
-            log("玩家打出「" + card.label() + "」，获得 " + card.type().value() + " 点护盾（当前护盾 " + playerBlock + "）。");
+        Card card = piles.peekHand(handIndex);
+        if (!card.playable()) {
+            log("「" + card.name() + "」无法打出。");
+            return;
         }
 
+        if (!tryConsumeEnergy(card.cost())) {
+            log("能量不足，无法打出「" + card.name() + "」。");
+            return;
+        }
+
+        piles.removeFromHand(handIndex);
+        log("玩家打出「" + card.name() + "」，消耗 " + card.cost() + " 点能量。");
+        card.effect().apply(new CombatCardEffectContext());
+
+        if (card.exhausts()) {
+            piles.sendToExhaust(card);
+            log("「" + card.name() + "」已消耗。");
+        } else {
+            piles.sendToDiscard(card);
+        }
         checkFinished();
     }
 
@@ -109,7 +136,7 @@ public class Combat {
             return;
         }
 
-        discardHand();
+        piles.discardHand();
         log("玩家结束回合。");
 
         if (finished) {
@@ -129,20 +156,11 @@ public class Combat {
         playerBlock = 0;
         monsterHp = MONSTER_MAX_HP;
         monsterBlock = 0;
+        energy = 0;
         monsterWillAttack = true;
         finished = false;
         resultText = "";
-        deck.clear();
-        hand.clear();
-        discard.clear();
-
-        for (int i = 0; i < DECK_ATTACK_COUNT; i++) {
-            deck.add(new Card(CardType.ATTACK));
-        }
-        for (int i = 0; i < DECK_DEFEND_COUNT; i++) {
-            deck.add(new Card(CardType.DEFEND));
-        }
-        Collections.shuffle(deck);
+        piles.initialize(CardLibrary.startingDeck());
 
         log("战斗开始。玩家 HP " + playerHp + "，怪物 HP " + monsterHp + "。");
         beginPlayerTurn();
@@ -152,8 +170,9 @@ public class Combat {
     private void beginPlayerTurn() {
         playerTurn = true;
         playerBlock = 0;
+        energy = PLAYER_MAX_ENERGY;
         drawToHandSize();
-        log("—— 玩家回合 —— 抽牌 " + hand.size() + " 张。点击卡牌打出，或结束回合。");
+        log("—— 玩家回合 —— 能量 " + energy + "，抽牌 " + piles.getHandSize() + " 张。");
     }
 
     private void runMonsterTurn() {
@@ -192,23 +211,15 @@ public class Combat {
     }
 
     private void drawToHandSize() {
-        while (hand.size() < HAND_SIZE) {
-            if (deck.isEmpty()) {
-                if (discard.isEmpty()) {
-                    break;
-                }
-                deck.addAll(discard);
-                discard.clear();
-                Collections.shuffle(deck);
-                log("抽牌堆用尽，弃牌堆洗回抽牌堆。");
-            }
-            hand.add(deck.remove(deck.size() - 1));
-        }
+        piles.drawToHandSize(HAND_SIZE);
     }
 
-    private void discardHand() {
-        discard.addAll(hand);
-        hand.clear();
+    private boolean tryConsumeEnergy(int cost) {
+        if (cost < 0 || energy < cost) {
+            return false;
+        }
+        energy -= cost;
+        return true;
     }
 
     private void checkFinished() {
@@ -230,5 +241,76 @@ public class Combat {
 
     private void log(String line) {
         logger.accept(line);
+    }
+
+    /**
+     * 把 Combat 当前操作暴露给卡牌效果，隔离卡牌层与未来的实体层。
+     */
+    private final class CombatCardEffectContext implements CardEffectContext {
+
+        @Override
+        public void dealDamageToMonster(int amount) {
+            int dealt = applyDamage(true, normalizeAmount(amount));
+            log("对怪物造成 " + dealt + " 点伤害。");
+        }
+
+        @Override
+        public void addMonsterBlock(int amount) {
+            if (amount <= 0) {
+                return;
+            }
+            monsterBlock += amount;
+            log("怪物获得 " + amount + " 点护甲。");
+        }
+
+        @Override
+        public void dealDamageToPlayer(int amount) {
+            int dealt = applyDamage(false, normalizeAmount(amount));
+            log("玩家受到 " + dealt + " 点伤害。");
+        }
+
+        @Override
+        public void addPlayerBlock(int amount) {
+            if (amount <= 0) {
+                return;
+            }
+            playerBlock += amount;
+            log("玩家获得 " + amount + " 点护甲。");
+        }
+
+        @Override
+        public void healPlayer(int amount) {
+            if (amount <= 0) {
+                return;
+            }
+            int before = playerHp;
+            playerHp = Math.min(PLAYER_MAX_HP, playerHp + amount);
+            log("玩家恢复 " + (playerHp - before) + " 点生命。");
+        }
+
+        @Override
+        public void drawCards(int count) {
+            int drawn = piles.draw(count).size();
+            log("额外抽 " + drawn + " 张牌。");
+        }
+
+        @Override
+        public void addPlayerEnergy(int amount) {
+            if (amount <= 0) {
+                return;
+            }
+            int before = energy;
+            energy = Math.min(PLAYER_MAX_ENERGY, energy + amount);
+            log("玩家获得 " + (energy - before) + " 点能量。");
+        }
+
+        @Override
+        public void log(String line) {
+            Combat.this.log(line);
+        }
+
+        private int normalizeAmount(int amount) {
+            return Math.max(0, amount);
+        }
     }
 }
