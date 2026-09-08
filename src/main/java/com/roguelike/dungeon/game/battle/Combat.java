@@ -88,6 +88,16 @@ public class Combat {
         return piles.getHand();
     }
 
+    /** 抽牌堆快照，仅供调试界面查看。下一张在列表末尾。 */
+    public List<Card> getDrawPile() {
+        return piles.getDrawPile();
+    }
+
+    /** 弃牌堆快照，仅供调试界面查看。最近弃入的在列表末尾。 */
+    public List<Card> getDiscardPile() {
+        return piles.getDiscardPile();
+    }
+
     /** 界面展示怪物下一动，方便看清攻防循环。 */
     public String getMonsterIntent() {
         if (finished) {
