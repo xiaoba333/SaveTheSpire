@@ -1,4 +1,4 @@
-package com.roguelike.dungeon.game;
+package com.roguelike.dungeon.game.entity;
 
 /**
  * 血量接口：管理生命值的增减与死亡判定。
