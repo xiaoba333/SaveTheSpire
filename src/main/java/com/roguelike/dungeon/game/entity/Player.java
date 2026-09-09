@@ -242,6 +242,16 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
     // ---------- 战斗协作 ----------
 
     /**
+     * 开始新一场战斗：保留当前生命值，重置能量、护甲和状态。
+     * 由 Combat 在每场战斗开始时调用（玩家跨战斗复用，血量不重置）。
+     */
+    public void resetForBattle() {
+        refresh();          // 能量回满
+        clearArmor();       // 护甲清零
+        clearStatuses();    // 清空本场 Buff/Debuff
+    }
+
+    /**
      * 统一受击入口：先结算易伤，再护甲吸收，剩余伤害由血量承担。
      * @return 实际扣除的血量
      */
