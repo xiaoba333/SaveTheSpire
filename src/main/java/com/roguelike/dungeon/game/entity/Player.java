@@ -1,6 +1,8 @@
 package com.roguelike.dungeon.game.entity;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -9,7 +11,7 @@ import java.util.Map;
  */
 public class Player implements IHealth, IArmor, IEnergy, IStatus {
 
-    private final int maxHealth;
+    private int maxHealth;
     private int health;
     private int armor;
 
@@ -17,6 +19,8 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
     private int energy;
 
     private final Map<StatusEffect, Integer> statuses = new EnumMap<>(StatusEffect.class);
+
+    private final List<Relic> relics = new ArrayList<>();
 
     /**
      * @param maxHealth 玩家最大血量
@@ -191,6 +195,48 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         }
         addStacks(StatusEffect.VULNERABLE, -1);
         addStacks(StatusEffect.WEAK, -1);
+    }
+
+    // ---------- 遗物 ----------
+
+    /** 获得一个遗物。 */
+    public void addRelic(Relic relic) {
+        if (relic != null) {
+            relics.add(relic);
+        }
+    }
+
+    /** 是否持有某遗物（按实例比较）。 */
+    public boolean hasRelic(Relic relic) {
+        return relics.contains(relic);
+    }
+
+    /** 当前持有的全部遗物。 */
+    public List<Relic> getRelics() {
+        return List.copyOf(relics);
+    }
+
+    /**
+     * 进入新关卡时结算所有遗物效果（由 GameController 调用）。
+     */
+    public void onEnterLevel() {
+        for (Relic relic : relics) {
+            relic.onEnterLevel(this);
+        }
+    }
+
+    /** 降低最大生命值（下限 1 点），并把当前生命夹到新上限内。 */
+    public void reduceMaxHealth(int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        maxHealth = Math.max(1, maxHealth - amount);
+        health = Math.min(health, maxHealth);
+    }
+
+    /** 回满生命到当前最大生命值。 */
+    public void healToFull() {
+        health = maxHealth;
     }
 
     // ---------- 战斗协作 ----------
