@@ -31,6 +31,7 @@ public class Combat {
     private final Player player;
     private final List<CardInstance> battleDeck;
     private final LevelFinishHandler finishHandler;
+    private final Consumer<CardInstance> cardUpgradeHandler;
 
     private int monsterHp;
     private int monsterBlock;
@@ -52,7 +53,8 @@ public class Combat {
                 new Player(PLAYER_MAX_HP, PLAYER_MAX_ENERGY),
                 createDefaultDeck(),
                 logger,
-                result -> { });
+                result -> { },
+                upgradedCard -> { });
     }
 
     /**
@@ -66,12 +68,28 @@ public class Combat {
             List<CardInstance> battleDeck,
             Consumer<String> logger,
             LevelFinishHandler finishHandler) {
+        this(player, battleDeck, logger, finishHandler, upgradedCard -> { });
+    }
+
+    /**
+     * 创建与本局共享状态连接、并同步永久牌组升级的战斗。
+     *
+     * @param cardUpgradeHandler 当锻造牌升级牌实例时，把升级结果同步回 RunState
+     */
+    public Combat(
+            Player player,
+            List<CardInstance> battleDeck,
+            Consumer<String> logger,
+            LevelFinishHandler finishHandler,
+            Consumer<CardInstance> cardUpgradeHandler) {
         this.player = Objects.requireNonNull(player, "玩家不能为 null");
         this.battleDeck = List.copyOf(Objects.requireNonNull(
                 battleDeck, "战斗牌组不能为 null"));
         this.logger = Objects.requireNonNull(logger, "日志处理器不能为 null");
         this.finishHandler = Objects.requireNonNull(
                 finishHandler, "关卡结束处理器不能为 null");
+        this.cardUpgradeHandler = Objects.requireNonNull(
+                cardUpgradeHandler, "卡牌升级处理器不能为 null");
         this.piles = new CardPiles(logger);
         startNewFight();
     }
@@ -241,14 +259,17 @@ public class Combat {
             return PlayCardResult.CARD_NOT_PLAYABLE;
         }
 
-        if (!tryConsumeEnergy(card.cost())) {
+        int actualCost = instance.effectiveCost();
+        if (!tryConsumeEnergy(actualCost)) {
             log("能量不足，无法打出「" + card.name() + "」。");
             return PlayCardResult.NOT_ENOUGH_ENERGY;
         }
 
         piles.removeFromHand(handIndex);
-        log("玩家打出「" + card.name() + "」，消耗 " + card.cost() + " 点能量。");
-        card.effect().apply(new CombatCardEffectContext(this, player, piles));
+        log("玩家打出「" + card.name() + "」，消耗 " + actualCost + " 点能量。");
+        double effectMultiplier = instance.upgraded() ? 1.25 : 1.0;
+        card.effect().apply(new CombatCardEffectContext(
+                this, player, piles, effectMultiplier));
 
         if (card.exhausts()) {
             piles.sendToExhaust(instance);
@@ -397,6 +418,15 @@ public class Combat {
         }
         finishNotified = true;
         finishHandler.onLevelFinished(result);
+    }
+
+    /**
+     * 把战斗内升级后的卡牌同步给 RunState。
+     *
+     * <p>package-private 供同包卡牌效果上下文调用。</p>
+     */
+    void notifyCardUpgraded(CardInstance upgradedCard) {
+        cardUpgradeHandler.accept(upgradedCard);
     }
 
     /**

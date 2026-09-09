@@ -124,7 +124,8 @@ public final class GameController implements LevelFinishHandler {
                 runState.getPlayer(),
                 runState.getDeck(),
                 combatLogger,
-                this);
+                this,
+                runState::upgradeCard);
     }
 
     private void finishBattle(LevelResult result) {
