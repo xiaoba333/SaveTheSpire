@@ -1,13 +1,18 @@
 package com.roguelike.dungeon.game.battle;
 
+import com.roguelike.dungeon.flow.LevelFinishHandler;
+import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardEffectContext;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
+import com.roguelike.dungeon.game.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -24,12 +29,12 @@ public class Combat {
 
     private final Consumer<String> logger;
     private final CardPiles piles;
+    private final Player player;
+    private final List<CardInstance> battleDeck;
+    private final LevelFinishHandler finishHandler;
 
-    private int playerHp;
-    private int playerBlock;
     private int monsterHp;
     private int monsterBlock;
-    private int energy;
     /** true 表示怪物下一次行动是攻击，false 表示给自己叠护盾。 */
     private boolean monsterWillAttack;
     private boolean playerTurn;
@@ -37,20 +42,47 @@ public class Combat {
     private String resultText;
     private String resultCode;
     private int turnNumber;
+    private boolean finishNotified;
     private final List<String> newLogs = new ArrayList<>();
 
+    /**
+     * 保留给原有调试界面和单元测试的独立战斗构造方法。
+     */
     public Combat(Consumer<String> logger) {
-        this.logger = logger;
+        this(
+                new Player(PLAYER_MAX_HP, PLAYER_MAX_ENERGY),
+                createDefaultDeck(),
+                logger,
+                result -> { });
+    }
+
+    /**
+     * 创建与本局共享状态连接的战斗。
+     *
+     * <p>玩家对象直接来自 RunState，因此战斗中的生命变化会保留到后续关卡。
+     * 永久牌组只用于初始化本场战斗的临时牌堆。</p>
+     */
+    public Combat(
+            Player player,
+            List<CardInstance> battleDeck,
+            Consumer<String> logger,
+            LevelFinishHandler finishHandler) {
+        this.player = Objects.requireNonNull(player, "玩家不能为 null");
+        this.battleDeck = List.copyOf(Objects.requireNonNull(
+                battleDeck, "战斗牌组不能为 null"));
+        this.logger = Objects.requireNonNull(logger, "日志处理器不能为 null");
+        this.finishHandler = Objects.requireNonNull(
+                finishHandler, "关卡结束处理器不能为 null");
         this.piles = new CardPiles(logger);
         startNewFight();
     }
 
     public int getPlayerHp() {
-        return playerHp;
+        return player.getHealth();
     }
 
     public int getPlayerBlock() {
-        return playerBlock;
+        return player.getArmor();
     }
 
     public int getMonsterHp() {
@@ -62,15 +94,15 @@ public class Combat {
     }
 
     public int getEnergy() {
-        return energy;
+        return player.getEnergy();
     }
 
     public int getPlayerMaxHp() {
-        return PLAYER_MAX_HP;
+        return player.getMaxHealth();
     }
 
     public int getPlayerMaxEnergy() {
-        return PLAYER_MAX_ENERGY;
+        return player.getMaxEnergy();
     }
 
     public int getMonsterMaxHp() {
@@ -254,30 +286,37 @@ public class Combat {
     }
 
     private void startNewFight() {
-        playerHp = PLAYER_MAX_HP;
-        playerBlock = 0;
+        player.clearArmor();
+        player.clearStatuses();
+        player.refresh();
         monsterHp = MONSTER_MAX_HP;
         monsterBlock = 0;
-        energy = 0;
         monsterWillAttack = true;
         finished = false;
         resultText = "";
         resultCode = null;
         turnNumber = 1;
+        finishNotified = false;
         newLogs.clear();
-        piles.initialize(CardLibrary.startingDeck());
+        piles.initializeInstances(battleDeck);
 
-        log("战斗开始。玩家 HP " + playerHp + "，怪物 HP " + monsterHp + "。");
+        log("战斗开始。玩家 HP " + player.getHealth()
+                + "，怪物 HP " + monsterHp + "。");
+        checkFinished();
+        if (finished) {
+            return;
+        }
         beginPlayerTurn();
     }
 
     /** 玩家回合开始：清空自身未消耗护盾（参考杀戮尖塔），再抽满手牌。 */
     private void beginPlayerTurn() {
         playerTurn = true;
-        playerBlock = 0;
-        energy = PLAYER_MAX_ENERGY;
+        player.clearArmor();
+        player.refresh();
         drawToHandSize();
-        log("—— 玩家回合 —— 能量 " + energy + "，抽牌 " + piles.getHandSize() + " 张。");
+        log("—— 玩家回合 —— 能量 " + player.getEnergy()
+                + "，抽牌 " + piles.getHandSize() + " 张。");
     }
 
     private void runMonsterTurn() {
@@ -308,11 +347,7 @@ public class Combat {
             monsterHp = Math.max(0, monsterHp - hpLoss);
             return hpLoss;
         }
-        int absorbed = Math.min(playerBlock, amount);
-        playerBlock -= absorbed;
-        int hpLoss = amount - absorbed;
-        playerHp = Math.max(0, playerHp - hpLoss);
-        return hpLoss;
+        return player.receiveDamage(amount);
     }
 
     private void drawToHandSize() {
@@ -320,11 +355,10 @@ public class Combat {
     }
 
     private boolean tryConsumeEnergy(int cost) {
-        if (cost < 0 || energy < cost) {
+        if (cost < 0) {
             return false;
         }
-        energy -= cost;
-        return true;
+        return player.consume(cost);
     }
 
     private void checkFinished() {
@@ -337,13 +371,23 @@ public class Combat {
             resultText = "胜利：怪物血量已归零。";
             resultCode = "VICTORY";
             log(resultText);
-        } else if (playerHp <= 0) {
+            notifyFinished(LevelResult.COMPLETED);
+        } else if (player.isDead()) {
             finished = true;
             playerTurn = false;
             resultText = "失败：玩家血量已归零。";
             resultCode = "DEFEAT";
             log(resultText);
+            notifyFinished(LevelResult.DEFEATED);
         }
+    }
+
+    private void notifyFinished(LevelResult result) {
+        if (finishNotified) {
+            return;
+        }
+        finishNotified = true;
+        finishHandler.onLevelFinished(result);
     }
 
     private void log(String line) {
@@ -400,7 +444,7 @@ public class Combat {
             if (amount <= 0) {
                 return;
             }
-            playerBlock += amount;
+            player.addArmor(amount);
             log("玩家获得 " + amount + " 点护甲。");
         }
 
@@ -409,9 +453,9 @@ public class Combat {
             if (amount <= 0) {
                 return;
             }
-            int before = playerHp;
-            playerHp = Math.min(PLAYER_MAX_HP, playerHp + amount);
-            log("玩家恢复 " + (playerHp - before) + " 点生命。");
+            int before = player.getHealth();
+            player.heal(amount);
+            log("玩家恢复 " + (player.getHealth() - before) + " 点生命。");
         }
 
         @Override
@@ -425,9 +469,9 @@ public class Combat {
             if (amount <= 0) {
                 return;
             }
-            int before = energy;
-            energy = Math.min(PLAYER_MAX_ENERGY, energy + amount);
-            log("玩家获得 " + (energy - before) + " 点能量。");
+            int before = player.getEnergy();
+            player.addEnergy(amount);
+            log("玩家获得 " + (player.getEnergy() - before) + " 点能量。");
         }
 
         @Override
@@ -438,5 +482,11 @@ public class Combat {
         private int normalizeAmount(int amount) {
             return Math.max(0, amount);
         }
+    }
+
+    private static List<CardInstance> createDefaultDeck() {
+        return CardLibrary.startingDeck().stream()
+                .map(card -> new CardInstance(UUID.randomUUID().toString(), card))
+                .toList();
     }
 }
