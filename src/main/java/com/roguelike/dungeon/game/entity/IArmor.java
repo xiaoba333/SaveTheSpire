@@ -1,4 +1,4 @@
-package com.roguelike.dungeon.game;
+package com.roguelike.dungeon.game.entity;
 
 /**
  * 护甲接口：管理护甲的叠甲、伤害吸收与清空。

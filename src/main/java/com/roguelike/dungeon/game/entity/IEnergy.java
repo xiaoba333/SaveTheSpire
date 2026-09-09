@@ -1,4 +1,4 @@
-package com.roguelike.dungeon.game;
+package com.roguelike.dungeon.game.entity;
 
 /**
  * 能量接口：管理每回合出牌消耗的能量。

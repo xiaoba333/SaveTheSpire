@@ -1,10 +1,13 @@
-package com.roguelike.dungeon.game;
+package com.roguelike.dungeon.game.entity;
+
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
- * 玩家实体：拥有血量、护甲、能量三种属性。
- * 通过实现 {@link IHealth} / {@link IArmor} / {@link IEnergy} 三个接口来拼装能力。
+ * 玩家实体：拥有血量、护甲、能量三种属性，并支持状态效果（易伤 / 虚弱 / 中毒）。
+ * 通过实现 {@link IHealth} / {@link IArmor} / {@link IEnergy} / {@link IStatus} 四个接口拼装能力。
  */
-public class Player implements IHealth, IArmor, IEnergy {
+public class Player implements IHealth, IArmor, IEnergy, IStatus {
 
     private final int maxHealth;
     private int health;
@@ -12,6 +15,8 @@ public class Player implements IHealth, IArmor, IEnergy {
 
     private final int maxEnergy;
     private int energy;
+
+    private final Map<StatusEffect, Integer> statuses = new EnumMap<>(StatusEffect.class);
 
     /**
      * @param maxHealth 玩家最大血量
@@ -142,15 +147,81 @@ public class Player implements IHealth, IArmor, IEnergy {
         energy = maxEnergy;
     }
 
+    // ---------- IStatus ----------
+
+    @Override
+    public int getStacks(StatusEffect effect) {
+        return statuses.getOrDefault(effect, 0);
+    }
+
+    @Override
+    public void addStacks(StatusEffect effect, int amount) {
+        if (effect == null) {
+            return;
+        }
+        int next = Math.max(0, getStacks(effect) + amount);
+        if (next == 0) {
+            statuses.remove(effect);
+        } else {
+            statuses.put(effect, next);
+        }
+    }
+
+    @Override
+    public void removeStatus(StatusEffect effect) {
+        statuses.remove(effect);
+    }
+
+    @Override
+    public void clearStatuses() {
+        statuses.clear();
+    }
+
+    @Override
+    public boolean hasStatus(StatusEffect effect) {
+        return getStacks(effect) > 0;
+    }
+
+    @Override
+    public void tickEndOfTurn() {
+        int poison = getStacks(StatusEffect.POISON);
+        if (poison > 0) {
+            takeDamage(poison);   // 中毒直接扣血（无视护甲）
+            addStacks(StatusEffect.POISON, -1);
+        }
+        addStacks(StatusEffect.VULNERABLE, -1);
+        addStacks(StatusEffect.WEAK, -1);
+    }
+
     // ---------- 战斗协作 ----------
 
     /**
-     * 统一受击入口：护甲先吸收，剩余伤害由血量承担。
+     * 统一受击入口：先结算易伤，再护甲吸收，剩余伤害由血量承担。
      * @return 实际扣除的血量
      */
     public int receiveDamage(int damage) {
+        if (damage <= 0) {
+            return 0;
+        }
+        if (hasStatus(StatusEffect.VULNERABLE)) {
+            damage = damage * 3 / 2;  // 易伤：受到的伤害 +50%
+        }
         int remaining = absorb(damage);
         return takeDamage(remaining);
+    }
+
+    /**
+     * 计算本次实际造成的伤害（应用虚弱：只造成 75%）。
+     * 攻击方调用此方法后，再把结果交给目标的 {@link #receiveDamage(int)}。
+     */
+    public int calcDealtDamage(int baseDamage) {
+        if (baseDamage <= 0) {
+            return 0;
+        }
+        if (hasStatus(StatusEffect.WEAK)) {
+            return baseDamage * 3 / 4;  // 虚弱：造成的伤害只有 75%
+        }
+        return baseDamage;
     }
 
     /** 把 value 限制在 [min, max] 区间。 */
