@@ -6,6 +6,7 @@ import com.roguelike.dungeon.game.card.CardInstance;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -31,14 +32,38 @@ public final class CardPiles {
         this.random = random;
     }
 
-    /** 清空所有区域，并装入一套已洗牌的初始牌组。 */
+    /**
+     * 清空所有区域，并装入一套已洗牌的初始牌组。
+     *
+     * <p>这个入口接收卡牌模板 {@link Card}。每张模板都会被转换为一个新的
+     * {@link CardInstance}，适合旧版测试或尚未接入 RunState 的调试场景。</p>
+     */
     public void initialize(List<Card> cards) {
+        Objects.requireNonNull(cards, "卡牌模板列表不能为 null");
+        List<CardInstance> instances = new ArrayList<>(cards.size());
+        for (Card card : cards) {
+            Objects.requireNonNull(card, "卡牌模板不能为 null");
+            instances.add(new CardInstance(UUID.randomUUID().toString(), card));
+        }
+        initializeInstances(instances);
+    }
+
+    /**
+     * 清空所有区域，并装入 RunState 提供的永久牌组实例。
+     *
+     * <p>与 {@link #initialize(List)} 不同，这里直接复用外部传入的
+     * {@link CardInstance}，不会重新生成 UUID。这样单局成长后的牌组、奖励加入的
+     * 牌、以及未来可能升级过的牌实例都能在战斗之间保持一致。</p>
+     */
+    public void initializeInstances(List<CardInstance> instances) {
+        Objects.requireNonNull(instances, "卡牌实例列表不能为 null");
         drawPile.clear();
         hand.clear();
         discardPile.clear();
         exhaustPile.clear();
-        for (Card card : cards) {
-            drawPile.add(new CardInstance(UUID.randomUUID().toString(), card));
+        for (CardInstance instance : instances) {
+            Objects.requireNonNull(instance, "卡牌实例不能为 null");
+            drawPile.add(instance);
         }
         Collections.shuffle(drawPile, random);
     }

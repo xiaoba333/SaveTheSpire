@@ -5,9 +5,13 @@ import com.roguelike.dungeon.game.card.CardEffectContext;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
+import com.roguelike.dungeon.game.entity.Enemy;
+import com.roguelike.dungeon.game.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -27,7 +31,8 @@ import java.util.function.Consumer;
  */
 public class Combat {
 
-    // 以下常量是当前战斗的平衡参数。它们都是 public，方便界面或测试统一读取。
+    // 以下常量只用于旧的无参构造方法，以及尚未迁移到 RunState 的旧 UI。
+    // 正式爬塔流程应通过 EncounterDefinition、Player 和 Enemy 传入真实数值。
     public static final int PLAYER_MAX_HP = 50;
     public static final int MONSTER_MAX_HP = 30;
     public static final int MONSTER_ATTACK = 10;
@@ -43,17 +48,33 @@ public class Combat {
      */
     private final Consumer<String> logger;
 
+    /**
+     * 本场战斗使用的玩家实体。
+     *
+     * <p>玩家是 RunState 中跨关卡复用的对象。战斗开始时只重置能量、护甲和状态，
+     * 不会把生命值重置为满血。</p>
+     */
+    private final Player player;
+
+    /**
+     * 本场战斗面对的敌人实体。
+     *
+     * <p>敌人通常由地图节点对应的 EncounterDefinition 创建，每场战斗使用一个新实例。</p>
+     */
+    private final Enemy enemy;
+
     /** 牌堆管理器：负责抽牌堆、手牌、弃牌堆、消耗堆的移动。 */
     private final CardPiles piles;
 
-    // 玩家和怪物的当前战斗状态。
-    private int playerHp;
-    private int playerBlock;
-    private int monsterHp;
-    private int monsterBlock;
-    private int energy;
-    /** true 表示怪物下一次行动是攻击，false 表示给自己叠护盾。 */
-    private boolean monsterWillAttack;
+    /** 本场战斗开始前准备的永久牌组实例。 */
+    private final List<CardInstance> battleDeck;
+
+    /** 敌人整场战斗的行动脚本，按顺序循环执行。 */
+    private final List<MonsterAction> monsterActions;
+
+    /** 下一轮怪物行动在 monsterActions 中的下标。 */
+    private int monsterActionIndex;
+
     /** true 表示当前轮到玩家操作。 */
     private boolean playerTurn;
     /** true 表示战斗已经结束。 */
@@ -73,49 +94,98 @@ public class Combat {
      * @param logger 接收战斗日志的回调，例如界面追加文本或测试保存到列表
      */
     public Combat(Consumer<String> logger) {
+        this(
+                logger,
+                new Player(PLAYER_MAX_HP, PLAYER_MAX_ENERGY),
+                new Enemy(MONSTER_MAX_HP),
+                createInstances(CardLibrary.startingDeck()),
+                EncounterDefinition.alternating(MONSTER_ATTACK, MONSTER_BLOCK));
+    }
+
+    /**
+     * 使用默认怪物脚本创建一场战斗。
+     *
+     * @param logger 日志回调
+     * @param player 本局跨关卡复用的玩家对象
+     * @param enemy 本场战斗的敌人对象
+     * @param deck 本场战斗使用的永久牌组实例
+     */
+    public Combat(
+            Consumer<String> logger,
+            Player player,
+            Enemy enemy,
+            List<CardInstance> deck) {
+        this(
+                logger,
+                player,
+                enemy,
+                deck,
+                EncounterDefinition.alternating(MONSTER_ATTACK, MONSTER_BLOCK));
+    }
+
+    /**
+     * 正式战斗构造入口，由地图/关卡协调器创建。
+     *
+     * @param logger 日志回调
+     * @param player 本局玩家实体
+     * @param enemy 本场敌人实体
+     * @param deck 永久牌组实例列表，来自 RunState
+     * @param encounter 敌人行动脚本
+     */
+    public Combat(
+            Consumer<String> logger,
+            Player player,
+            Enemy enemy,
+            List<CardInstance> deck,
+            EncounterDefinition encounter) {
         this.logger = logger;
+        this.player = Objects.requireNonNull(player, "玩家实体不能为 null");
+        this.enemy = Objects.requireNonNull(enemy, "敌人实体不能为 null");
+        this.battleDeck = List.copyOf(Objects.requireNonNull(deck, "牌组不能为 null"));
+        this.monsterActions = Objects.requireNonNull(
+                encounter, "敌人行动配置不能为 null").actions();
         this.piles = new CardPiles(logger);
         startNewFight();
     }
 
     /** @return 玩家当前生命值 */
     public int getPlayerHp() {
-        return playerHp;
+        return player.getHealth();
     }
 
     /** @return 玩家当前护甲值 */
     public int getPlayerBlock() {
-        return playerBlock;
+        return player.getArmor();
     }
 
     /** @return 怪物当前生命值 */
     public int getMonsterHp() {
-        return monsterHp;
+        return enemy.getHealth();
     }
 
     /** @return 怪物当前护甲值 */
     public int getMonsterBlock() {
-        return monsterBlock;
+        return enemy.getArmor();
     }
 
     /** @return 玩家当前回合剩余能量 */
     public int getEnergy() {
-        return energy;
+        return player.getEnergy();
     }
 
     /** @return 玩家最大生命值 */
     public int getPlayerMaxHp() {
-        return PLAYER_MAX_HP;
+        return player.getMaxHealth();
     }
 
     /** @return 玩家每回合最大能量 */
     public int getPlayerMaxEnergy() {
-        return PLAYER_MAX_ENERGY;
+        return player.getMaxEnergy();
     }
 
     /** @return 怪物最大生命值 */
     public int getMonsterMaxHp() {
-        return MONSTER_MAX_HP;
+        return enemy.getMaxHealth();
     }
 
     /** @return 当前回合数 */
@@ -223,7 +293,11 @@ public class Combat {
         if (finished) {
             return "已倒下";
         }
-        return monsterWillAttack ? "下回合：攻击 " + MONSTER_ATTACK : "下回合：防御 +" + MONSTER_BLOCK;
+        MonsterAction nextAction = nextMonsterAction();
+        return switch (nextAction.type()) {
+            case ATTACK -> "下回合：攻击 " + nextAction.value();
+            case DEFEND -> "下回合：防御 +" + nextAction.value();
+        };
     }
 
     /**
@@ -235,9 +309,8 @@ public class Combat {
         if (finished) {
             return null;
         }
-        return monsterWillAttack
-                ? new Intent("ATTACK", MONSTER_ATTACK)
-                : new Intent("DEFEND", MONSTER_BLOCK);
+        MonsterAction nextAction = nextMonsterAction();
+        return new Intent(nextAction.type().name(), nextAction.value());
     }
 
     /**
@@ -358,23 +431,23 @@ public class Combat {
     /**
      * 初始化一场新战斗。
      *
-     * <p>会重置双方血量、护甲、能量、回合数、结果和日志，并重新填充牌堆。</p>
+     * <p>会重置玩家本场临时资源、怪物行动索引、回合数、结果和日志，并重新填充牌堆。
+     * 玩家生命值由 Player 实体跨关卡保留，这里不会回满。</p>
      */
     private void startNewFight() {
-        playerHp = PLAYER_MAX_HP;
-        playerBlock = 0;
-        monsterHp = MONSTER_MAX_HP;
-        monsterBlock = 0;
-        energy = 0;
-        monsterWillAttack = true;
+        player.resetForBattle();
+        enemy.clearArmor();
+        enemy.clearStatuses();
+        monsterActionIndex = 0;
         finished = false;
         resultText = "";
         resultCode = null;
         turnNumber = 1;
         newLogs.clear();
-        piles.initialize(CardLibrary.startingDeck());
+        piles.initializeInstances(battleDeck);
 
-        log("战斗开始。玩家 HP " + playerHp + "，怪物 HP " + monsterHp + "。");
+        log("战斗开始。玩家 HP " + player.getHealth()
+                + "，怪物 HP " + enemy.getHealth() + "。");
         beginPlayerTurn();
     }
 
@@ -385,10 +458,11 @@ public class Combat {
      */
     private void beginPlayerTurn() {
         playerTurn = true;
-        playerBlock = 0;
-        energy = PLAYER_MAX_ENERGY;
+        player.clearArmor();
+        player.refresh();
         drawToHandSize();
-        log("—— 玩家回合 —— 能量 " + energy + "，抽牌 " + piles.getHandSize() + " 张。");
+        log("—— 玩家回合 —— 能量 " + player.getEnergy()
+                + "，抽牌 " + piles.getHandSize() + " 张。");
     }
 
     /**
@@ -399,45 +473,38 @@ public class Combat {
      */
     private void runMonsterTurn() {
         playerTurn = false;
-        // 怪物回合开始时清空自己剩余护盾，本回合再决定攻击或叠盾。
-        monsterBlock = 0;
+        // 怪物回合开始时清空自己剩余护盾，再按行动脚本执行本回合动作。
+        enemy.clearArmor();
 
-        if (monsterWillAttack) {
-            int dealt = applyDamage(false, MONSTER_ATTACK);
-            log("怪物攻击，对玩家造成 " + dealt + " 点伤害。");
-        } else {
-            monsterBlock += MONSTER_BLOCK;
-            log("怪物防御，获得 " + MONSTER_BLOCK + " 点护盾。");
+        MonsterAction action = nextMonsterAction();
+        switch (action.type()) {
+            case ATTACK -> {
+                int damage = enemy.calcDealtDamage(action.value());
+                int dealt = player.receiveDamage(damage);
+                log("怪物攻击，对玩家造成 " + dealt + " 点伤害。");
+            }
+            case DEFEND -> {
+                enemy.addArmor(action.value());
+                log("怪物防御，获得 " + action.value() + " 点护盾。");
+            }
         }
-        monsterWillAttack = !monsterWillAttack;
+
+        monsterActionIndex = (monsterActionIndex + 1) % monsterActions.size();
         checkFinished();
-    }
-
-    /**
-     * @param toMonster true 表示伤害打向怪物，false 表示打向玩家
-     * @return 实际扣掉的血量（护盾先抵消）
-     *
-     * <p>伤害公式为：先用护甲吸收一部分，剩余部分扣生命。生命最低扣到 0，
-     * 不会变成负数。</p>
-     */
-    private int applyDamage(boolean toMonster, int amount) {
-        if (toMonster) {
-            int absorbed = Math.min(monsterBlock, amount);
-            monsterBlock -= absorbed;
-            int hpLoss = amount - absorbed;
-            monsterHp = Math.max(0, monsterHp - hpLoss);
-            return hpLoss;
-        }
-        int absorbed = Math.min(playerBlock, amount);
-        playerBlock -= absorbed;
-        int hpLoss = amount - absorbed;
-        playerHp = Math.max(0, playerHp - hpLoss);
-        return hpLoss;
     }
 
     /** 把手牌补到 {@link #HAND_SIZE} 张。 */
     private void drawToHandSize() {
         piles.drawToHandSize(HAND_SIZE);
+    }
+
+    /**
+     * 返回怪物当前要执行的行动。
+     *
+     * <p>当前只读取，不推进索引；真正推进在 runMonsterTurn() 末尾完成。</p>
+     */
+    private MonsterAction nextMonsterAction() {
+        return monsterActions.get(monsterActionIndex);
     }
 
     /**
@@ -447,11 +514,7 @@ public class Combat {
      * @return 成功扣除返回 true；费用非法或能量不足返回 false
      */
     private boolean tryConsumeEnergy(int cost) {
-        if (cost < 0 || energy < cost) {
-            return false;
-        }
-        energy -= cost;
-        return true;
+        return player.consume(cost);
     }
 
     /**
@@ -463,19 +526,33 @@ public class Combat {
         if (finished) {
             return;
         }
-        if (monsterHp <= 0) {
+        if (enemy.isDead()) {
             finished = true;
             playerTurn = false;
             resultText = "胜利：怪物血量已归零。";
             resultCode = "VICTORY";
             log(resultText);
-        } else if (playerHp <= 0) {
+        } else if (player.isDead()) {
             finished = true;
             playerTurn = false;
             resultText = "失败：玩家血量已归零。";
             resultCode = "DEFEAT";
             log(resultText);
         }
+    }
+
+    /**
+     * 把旧版 Card 模板列表转换成带唯一实例编号的 CardInstance 列表。
+     *
+     * <p>这只用于旧的 Combat(Consumer) 测试构造方式。正式流程中，
+     * RunState 已经持有 CardInstance，不需要重新生成编号。</p>
+     */
+    private static List<CardInstance> createInstances(List<Card> cards) {
+        List<CardInstance> instances = new ArrayList<>();
+        for (Card card : cards) {
+            instances.add(new CardInstance(UUID.randomUUID().toString(), card));
+        }
+        return List.copyOf(instances);
     }
 
     /**
@@ -486,6 +563,61 @@ public class Combat {
     private void log(String line) {
         logger.accept(line);
         newLogs.add(line);
+    }
+
+    /**
+     * 怪物行动类型。
+     *
+     * <p>当前 MVP 只支持攻击和防御。以后可以继续增加施加状态、回血等动作。</p>
+     */
+    public enum MonsterActionType {
+        /** 攻击玩家。 */
+        ATTACK,
+        /** 给自己增加护甲。 */
+        DEFEND
+    }
+
+    /**
+     * 怪物脚本中的单个行动。
+     *
+     * @param type 行动类型
+     * @param value 攻击伤害或护甲数值
+     */
+    public record MonsterAction(MonsterActionType type, int value) {
+        public MonsterAction {
+            Objects.requireNonNull(type, "怪物行动类型不能为 null");
+            if (value < 0) {
+                throw new IllegalArgumentException("怪物行动数值不能为负数");
+            }
+        }
+    }
+
+    /**
+     * 一场战斗的敌人行动配置。
+     *
+     * @param actions 按顺序循环执行的行动列表
+     */
+    public record EncounterDefinition(List<MonsterAction> actions) {
+        public EncounterDefinition {
+            Objects.requireNonNull(actions, "敌人行动列表不能为 null");
+            if (actions.isEmpty()) {
+                throw new IllegalArgumentException("敌人行动列表不能为空");
+            }
+            actions = List.copyOf(actions);
+        }
+
+        /**
+         * 创建旧版战斗使用的交替攻击/防御脚本。
+         *
+         * @param attack 攻击伤害
+         * @param block 防御叠甲
+         * @return 包含一次攻击和一次防御的配置
+         */
+        public static EncounterDefinition alternating(int attack, int block) {
+            return new EncounterDefinition(List.of(
+                    new MonsterAction(MonsterActionType.ATTACK, attack),
+                    new MonsterAction(MonsterActionType.DEFEND, block)));
+        }
     }
 
     /**
@@ -530,7 +662,9 @@ public class Combat {
         @Override
         public void dealDamageToMonster(int amount) {
             // normalizeAmount 先把负数伤害修正为 0。
-            int dealt = applyDamage(true, normalizeAmount(amount));
+            int baseDamage = normalizeAmount(amount);
+            int calculatedDamage = player.calcDealtDamage(baseDamage);
+            int dealt = enemy.receiveDamage(calculatedDamage);
             log("对怪物造成 " + dealt + " 点伤害。");
         }
 
@@ -540,13 +674,15 @@ public class Combat {
             if (amount <= 0) {
                 return;
             }
-            monsterBlock += amount;
+            enemy.addArmor(amount);
             log("怪物获得 " + amount + " 点护甲。");
         }
 
         @Override
         public void dealDamageToPlayer(int amount) {
-            int dealt = applyDamage(false, normalizeAmount(amount));
+            // 这个入口目前服务于「失去生命」类卡牌，因此直接扣血，
+            // 不经过护甲吸收和易伤结算。怪物攻击玩家走 Combat.runMonsterTurn()。
+            int dealt = player.takeDamage(normalizeAmount(amount));
             log("玩家受到 " + dealt + " 点伤害。");
         }
 
@@ -555,7 +691,7 @@ public class Combat {
             if (amount <= 0) {
                 return;
             }
-            playerBlock += amount;
+            player.addArmor(amount);
             log("玩家获得 " + amount + " 点护甲。");
         }
 
@@ -564,10 +700,10 @@ public class Combat {
             if (amount <= 0) {
                 return;
             }
-            int before = playerHp;
+            int before = player.getHealth();
             // 治疗不能超过玩家最大生命值。
-            playerHp = Math.min(PLAYER_MAX_HP, playerHp + amount);
-            log("玩家恢复 " + (playerHp - before) + " 点生命。");
+            player.heal(amount);
+            log("玩家恢复 " + (player.getHealth() - before) + " 点生命。");
         }
 
         @Override
@@ -582,10 +718,10 @@ public class Combat {
             if (amount <= 0) {
                 return;
             }
-            int before = energy;
+            int before = player.getEnergy();
             // 能量也不能超过本回合上限。
-            energy = Math.min(PLAYER_MAX_ENERGY, energy + amount);
-            log("玩家获得 " + (energy - before) + " 点能量。");
+            player.addEnergy(amount);
+            log("玩家获得 " + (player.getEnergy() - before) + " 点能量。");
         }
 
         @Override
