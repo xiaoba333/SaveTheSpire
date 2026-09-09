@@ -6,6 +6,7 @@ import com.roguelike.dungeon.game.card.CardInstance;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -33,12 +34,28 @@ public final class CardPiles {
 
     /** 清空所有区域，并装入一套已洗牌的初始牌组。 */
     public void initialize(List<Card> cards) {
+        Objects.requireNonNull(cards, "牌组不能为 null");
+        List<CardInstance> instances = new ArrayList<>(cards.size());
+        for (Card card : cards) {
+            instances.add(new CardInstance(
+                    UUID.randomUUID().toString(),
+                    Objects.requireNonNull(card, "牌组不能包含 null")));
+        }
+        initializeInstances(instances);
+    }
+
+    /**
+     * 清空所有区域，并从一局游戏的永久牌组快照初始化战斗牌堆。
+     * 只复制列表结构，不会改变 RunState 中的永久牌组顺序。
+     */
+    public void initializeInstances(List<CardInstance> cards) {
+        Objects.requireNonNull(cards, "牌组不能为 null");
         drawPile.clear();
         hand.clear();
         discardPile.clear();
         exhaustPile.clear();
-        for (Card card : cards) {
-            drawPile.add(new CardInstance(UUID.randomUUID().toString(), card));
+        for (CardInstance card : cards) {
+            drawPile.add(Objects.requireNonNull(card, "牌组不能包含 null"));
         }
         Collections.shuffle(drawPile, random);
     }
