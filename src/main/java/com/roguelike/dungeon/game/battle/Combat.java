@@ -3,7 +3,6 @@ package com.roguelike.dungeon.game.battle;
 import com.roguelike.dungeon.flow.LevelFinishHandler;
 import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.game.card.Card;
-import com.roguelike.dungeon.game.card.CardEffectContext;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
@@ -249,7 +248,7 @@ public class Combat {
 
         piles.removeFromHand(handIndex);
         log("玩家打出「" + card.name() + "」，消耗 " + card.cost() + " 点能量。");
-        card.effect().apply(new CombatCardEffectContext());
+        card.effect().apply(new CombatCardEffectContext(this, player, piles));
 
         if (card.exhausts()) {
             piles.sendToExhaust(instance);
@@ -339,7 +338,17 @@ public class Combat {
      * @param toMonster true 表示伤害打向怪物，false 表示打向玩家
      * @return 实际扣掉的血量（护盾先抵消）
      */
-    private int applyDamage(boolean toMonster, int amount) {
+    /**
+     * 结算一次伤害。
+     *
+     * <p>package-private 是为了让同包的卡牌效果上下文可以使用；
+     * 外部模块仍应通过 Combat 的公开方法操作战斗。</p>
+     *
+     * @param toMonster true 表示伤害打向怪物，false 表示打向玩家
+     * @param amount 原始伤害值
+     * @return 实际扣除的血量
+     */
+    int applyDamage(boolean toMonster, int amount) {
         if (toMonster) {
             int absorbed = Math.min(monsterBlock, amount);
             monsterBlock -= absorbed;
@@ -390,9 +399,26 @@ public class Combat {
         finishHandler.onLevelFinished(result);
     }
 
-    private void log(String line) {
+    /**
+     * 向外部日志和增量日志写入一行战斗日志。
+     *
+     * <p>同包卡牌效果上下文会调用这个方法，避免直接持有日志列表。</p>
+     */
+    void log(String line) {
         logger.accept(line);
         newLogs.add(line);
+    }
+
+    /**
+     * 给怪物增加护甲。
+     *
+     * <p>这个方法供同包卡牌效果上下文调用，外部逻辑仍通过卡牌效果进入。</p>
+     */
+    void addMonsterBlockInternal(int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        monsterBlock += amount;
     }
 
     /**
@@ -411,77 +437,6 @@ public class Combat {
         NOT_ENOUGH_ENERGY,
         CARD_NOT_PLAYABLE,
         BATTLE_FINISHED
-    }
-
-    /**
-     * 把 Combat 当前操作暴露给卡牌效果，隔离卡牌层与未来的实体层。
-     */
-    private final class CombatCardEffectContext implements CardEffectContext {
-
-        @Override
-        public void dealDamageToMonster(int amount) {
-            int dealt = applyDamage(true, normalizeAmount(amount));
-            log("对怪物造成 " + dealt + " 点伤害。");
-        }
-
-        @Override
-        public void addMonsterBlock(int amount) {
-            if (amount <= 0) {
-                return;
-            }
-            monsterBlock += amount;
-            log("怪物获得 " + amount + " 点护甲。");
-        }
-
-        @Override
-        public void dealDamageToPlayer(int amount) {
-            int dealt = applyDamage(false, normalizeAmount(amount));
-            log("玩家受到 " + dealt + " 点伤害。");
-        }
-
-        @Override
-        public void addPlayerBlock(int amount) {
-            if (amount <= 0) {
-                return;
-            }
-            player.addArmor(amount);
-            log("玩家获得 " + amount + " 点护甲。");
-        }
-
-        @Override
-        public void healPlayer(int amount) {
-            if (amount <= 0) {
-                return;
-            }
-            int before = player.getHealth();
-            player.heal(amount);
-            log("玩家恢复 " + (player.getHealth() - before) + " 点生命。");
-        }
-
-        @Override
-        public void drawCards(int count) {
-            int drawn = piles.draw(count).size();
-            log("额外抽 " + drawn + " 张牌。");
-        }
-
-        @Override
-        public void addPlayerEnergy(int amount) {
-            if (amount <= 0) {
-                return;
-            }
-            int before = player.getEnergy();
-            player.addEnergy(amount);
-            log("玩家获得 " + (player.getEnergy() - before) + " 点能量。");
-        }
-
-        @Override
-        public void log(String line) {
-            Combat.this.log(line);
-        }
-
-        private int normalizeAmount(int amount) {
-            return Math.max(0, amount);
-        }
     }
 
     private static List<CardInstance> createDefaultDeck() {
