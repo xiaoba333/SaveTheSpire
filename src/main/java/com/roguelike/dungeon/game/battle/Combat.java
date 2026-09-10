@@ -270,6 +270,9 @@ public class Combat {
         state.getPiles().discardHand();
         log("玩家结束回合。");
 
+        // 玩家回合结束：中毒结算 + 易伤 / 虚弱减层。
+        state.getPlayer().tickEndOfTurn();
+        checkFinished();
         if (state.isFinished()) {
             return;
         }
@@ -280,6 +283,13 @@ public class Combat {
         } else {
             log(monsterAi.name() + "防御，获得 " + monsterResult.value() + " 点护盾。");
         }
+        checkFinished();
+        if (state.isFinished()) {
+            return;
+        }
+
+        // 怪物回合结束：中毒结算 + 易伤 / 虚弱减层。
+        state.getMonster().tickEndOfTurn();
         checkFinished();
         if (state.isFinished()) {
             return;

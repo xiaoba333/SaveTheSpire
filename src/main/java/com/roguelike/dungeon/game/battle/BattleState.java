@@ -2,6 +2,7 @@ package com.roguelike.dungeon.game.battle;
 
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.deck.CardPiles;
+import com.roguelike.dungeon.game.entity.Enemy;
 import com.roguelike.dungeon.game.entity.Player;
 
 import java.util.List;
@@ -16,12 +17,10 @@ import java.util.Objects;
 public final class BattleState {
 
     private final Player player;
+    private final Enemy monster;
     private final CardPiles piles;
     private final List<CardInstance> battleDeck;
-    private final int monsterMaxHp;
 
-    private int monsterHp;
-    private int monsterBlock;
     /** true 表示怪物下一次行动是攻击，false 表示给自己叠护盾。 */
     private boolean monsterWillAttack;
     private boolean playerTurn;
@@ -45,12 +44,16 @@ public final class BattleState {
         this.battleDeck = List.copyOf(Objects.requireNonNull(
                 battleDeck, "战斗牌组不能为 null"));
         this.piles = Objects.requireNonNull(piles, "牌堆不能为 null");
-        this.monsterMaxHp = monsterMaxHp;
-        this.monsterHp = monsterMaxHp;
+        this.monster = new Enemy(monsterMaxHp);
     }
 
     public Player getPlayer() {
         return player;
+    }
+
+    /** 本场战斗的怪物实体（承载血量 / 护甲 / 状态效果）。 */
+    public Enemy getMonster() {
+        return monster;
     }
 
     public CardPiles getPiles() {
@@ -62,23 +65,24 @@ public final class BattleState {
     }
 
     public int getMonsterMaxHp() {
-        return monsterMaxHp;
+        return monster.getMaxHealth();
     }
 
     public int getMonsterHp() {
-        return monsterHp;
+        return monster.getHealth();
     }
 
     public void setMonsterHp(int monsterHp) {
-        this.monsterHp = monsterHp;
+        monster.setHealth(monsterHp);
     }
 
     public int getMonsterBlock() {
-        return monsterBlock;
+        return monster.getArmor();
     }
 
     public void setMonsterBlock(int monsterBlock) {
-        this.monsterBlock = monsterBlock;
+        monster.clearArmor();
+        monster.addArmor(monsterBlock);
     }
 
     public boolean isMonsterWillAttack() {
@@ -130,7 +134,7 @@ public final class BattleState {
     }
 
     /**
-     * 结算一次伤害。公式与原 {@code Combat.applyDamage} 完全一致。
+     * 结算一次伤害，攻击方的「虚弱」与目标的「易伤」都参与结算。
      *
      * @param toMonster true 表示伤害打向怪物，false 表示打向玩家
      * @param amount 原始伤害值
@@ -138,22 +142,15 @@ public final class BattleState {
      */
     public int applyDamage(boolean toMonster, int amount) {
         if (toMonster) {
-            int absorbed = Math.min(monsterBlock, amount);
-            monsterBlock -= absorbed;
-            int hpLoss = amount - absorbed;
-            monsterHp = Math.max(0, monsterHp - hpLoss);
-            return hpLoss;
+            return monster.receiveDamage(player.calcDealtDamage(amount));
         }
-        return player.receiveDamage(amount);
+        return player.receiveDamage(monster.calcDealtDamage(amount));
     }
 
     /**
      * 给怪物增加护甲。amount &lt;= 0 时忽略。
      */
     public void addMonsterBlock(int amount) {
-        if (amount <= 0) {
-            return;
-        }
-        monsterBlock += amount;
+        monster.addArmor(amount);
     }
 }
