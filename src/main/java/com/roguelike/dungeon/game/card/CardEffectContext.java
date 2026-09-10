@@ -1,6 +1,7 @@
 package com.roguelike.dungeon.game.card;
 
 import com.roguelike.dungeon.game.entity.Power;
+import com.roguelike.dungeon.game.entity.StatusEffect;
 
 /**
  * 卡牌效果可使用的战斗操作集合。
@@ -49,6 +50,12 @@ public interface CardEffectContext {
 
     /** 降低玩家最大生命值，并把当前生命夹到新上限内。 */
     void reducePlayerMaxHealth(int amount);
+
+    /** 给敌人叠加指定状态的层数。 */
+    void applyStatusToMonster(StatusEffect effect, int amount);
+
+    /** 给玩家叠加指定状态的层数。 */
+    void applyStatusToPlayer(StatusEffect effect, int amount);
 
     /**
      * 升级当前卡牌效果指定的目标手牌。

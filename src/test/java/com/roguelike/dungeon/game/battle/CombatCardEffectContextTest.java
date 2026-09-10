@@ -4,6 +4,7 @@ import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.StatusEffect;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -40,6 +41,19 @@ class CombatCardEffectContextTest {
         CombatCardEffectContext context = newContext(state, true);
 
         assertTrue(context.isUpgraded());
+    }
+
+    @Test
+    void statusMethodsShouldApplyStacksToCombatants() {
+        BattleState state = readyState();
+        CombatCardEffectContext context = newContext(state, false);
+
+        context.applyStatusToMonster(StatusEffect.VULNERABLE, 2);
+        context.applyStatusToMonster(StatusEffect.VULNERABLE, 1);
+        context.applyStatusToPlayer(StatusEffect.WEAK, 2);
+
+        assertEquals(3, state.getMonsterStatusStacks(StatusEffect.VULNERABLE));
+        assertEquals(2, state.getPlayer().getStacks(StatusEffect.WEAK));
     }
 
     @Test

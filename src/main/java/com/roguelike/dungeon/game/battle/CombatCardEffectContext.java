@@ -5,6 +5,7 @@ import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.entity.Power;
+import com.roguelike.dungeon.game.entity.StatusEffect;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -129,6 +130,16 @@ public final class CombatCardEffectContext implements CardEffectContext {
     @Override
     public void reducePlayerMaxHealth(int amount) {
         player.reduceMaxHealth(amount);
+    }
+
+    @Override
+    public void applyStatusToMonster(StatusEffect effect, int amount) {
+        state.addMonsterStatus(effect, amount);
+    }
+
+    @Override
+    public void applyStatusToPlayer(StatusEffect effect, int amount) {
+        player.addStacks(effect, amount);
     }
 
     @Override
