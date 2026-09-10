@@ -29,20 +29,25 @@ public record CardInstance(String id, Card card, boolean upgraded) {
         return new CardInstance(id, card, true);
     }
 
+    /** 当前实例的显示名称；升级牌在原名后追加「+」。 */
+    public String displayName() {
+        return upgraded ? card.name() + "+" : card.name();
+    }
+
+    /** 当前实例的卡牌说明。 */
+    public String displayDescription() {
+        return upgraded ? card.upgradedDescription() : card.description();
+    }
+
     /**
      * 计算实际能量费用。
      *
-     * <p>升级牌正费用统一减 1，但最低降到 1；0 费牌仍为 0。
-     * 但如果卡牌定义了显式升级效果（{@link Card#upgradedEffect()}），
-     * 升级只改变效果、不降低费用。</p>
+     * <p>升级牌正费用统一减 1，但最低降到 1；0 费牌仍为 0。</p>
      *
      * @return 实际需要消耗的能量
      */
     public int effectiveCost() {
         if (!upgraded || !card.upgradable()) {
-            return card.cost();
-        }
-        if (card.upgradedEffect() != null) {
             return card.cost();
         }
         if (card.cost() <= 0) {

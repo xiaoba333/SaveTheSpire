@@ -81,6 +81,43 @@ class CardPlayServiceTest {
         assertEquals(1, state.getPiles().getDiscardPileSize());
     }
 
+    @Test
+    void feastShouldIncreaseMaxHealthWhenKillingEnemy() {
+        BattleState state = readyStateForCards(
+                List.of(new CardInstance("feast-1", CardLibrary.FEAST)), 3);
+        state.setMonsterHp(5);
+        CardPlayService service = new CardPlayService(line -> { }, card -> { });
+        String feastId = state.getPiles().getHand().stream()
+                .filter(card -> card.card().id().equals("feast"))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        assertEquals(PlayCardResult.SUCCESS, service.play(state, feastId));
+
+        assertEquals(51, state.getPlayer().getMaxHealth());
+        assertEquals(0, state.getMonsterHp());
+    }
+
+    @Test
+    void sacrificeStrikeShouldDealCurrentHealthAndHurtPlayer() {
+        BattleState state = readyStateForCards(
+                List.of(new CardInstance(
+                        "sacrifice-1", CardLibrary.SACRIFICE_STRIKE)), 3);
+        state.getPlayer().setHealth(20);
+        CardPlayService service = new CardPlayService(line -> { }, card -> { });
+        String sacrificeId = state.getPiles().getHand().stream()
+                .filter(card -> card.card().id().equals("sacrifice_strike"))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        assertEquals(PlayCardResult.SUCCESS, service.play(state, sacrificeId));
+
+        assertEquals(17, state.getPlayer().getHealth());
+        assertEquals(10, state.getMonsterHp());
+    }
+
     private static BattleState readyState(int energy) {
         Player player = new Player(50, 3);
         player.setEnergy(energy);
@@ -103,6 +140,18 @@ class CardPlayServiceTest {
         CardPiles piles = new CardPiles(line -> { }, new java.util.Random(1));
         piles.initializeInstances(deck);
         piles.drawToHandSize(2);
+        BattleState state = new BattleState(player, deck, piles, 30);
+        state.setPlayerTurn(true);
+        return state;
+    }
+
+    private static BattleState readyStateForCards(
+            List<CardInstance> deck, int energy) {
+        Player player = new Player(50, 3);
+        player.setEnergy(energy);
+        CardPiles piles = new CardPiles(line -> { }, new java.util.Random(1));
+        piles.initializeInstances(deck);
+        piles.drawToHandSize(deck.size());
         BattleState state = new BattleState(player, deck, piles, 30);
         state.setPlayerTurn(true);
         return state;

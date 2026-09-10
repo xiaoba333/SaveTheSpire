@@ -18,8 +18,10 @@ public final class CardLibrary {
             "打击",
             CardType.ATTACK,
             1,
-            "造成 6 点伤害。",
-            context -> context.dealDamageToMonster(6),
+            "造成 6 点伤害，升级后造成 9 点伤害。",
+            "对一名敌人造成 9 点伤害。",
+            context -> context.dealDamageToMonster(
+                    context.isUpgraded() ? 9 : 6),
             false,
             true,
             true);
@@ -29,8 +31,10 @@ public final class CardLibrary {
             "防御",
             CardType.SKILL,
             1,
-            "获得 5 点护甲。",
-            context -> context.addPlayerBlock(5),
+            "获得 6 点护甲，升级后获得 9 点护甲。",
+            "获得 9 点护甲。",
+            context -> context.addPlayerBlock(
+                    context.isUpgraded() ? 9 : 6),
             false,
             true,
             true);
@@ -111,6 +115,50 @@ public final class CardLibrary {
             true);
 
     /**
+     * 狂宴：造成伤害，若击杀敌人则提高最大生命值。
+     *
+     * <p>普通版：伤害 6，最大生命 +1；升级版：伤害 9，最大生命 +2。</p>
+     */
+    public static final Card FEAST = new Card(
+            "feast",
+            "狂宴",
+            CardType.ATTACK,
+            1,
+            "造成 6 点伤害，若击杀敌人最大生命值 +1；升级后造成 9 点伤害，最大生命值 +2。",
+            "对一名敌人造成 9 点伤害，若击杀敌人最大生命值 +2。",
+            context -> {
+                boolean killed = context.dealDamageToMonster(
+                        context.isUpgraded() ? 9 : 6);
+                if (killed) {
+                    context.increasePlayerMaxHealth(
+                            context.isUpgraded() ? 2 : 1);
+                }
+            },
+            false,
+            true,
+            true);
+
+    /**
+     * 献身打击：造成等于玩家当前生命值的伤害，并损失自身生命。
+     *
+     * <p>普通版：损失 3 点生命；升级版：损失 1 点生命。</p>
+     */
+    public static final Card SACRIFICE_STRIKE = new Card(
+            "sacrifice_strike",
+            "献身打击",
+            CardType.ATTACK,
+            1,
+            "造成等于当前生命值的伤害，自己失去 3 点生命；升级后自己失去 1 点生命。",
+            "对一名敌人造成等于当前生命值的伤害，自己失去 1 点生命。",
+            context -> {
+                context.dealDamageToMonster(context.getPlayerHealth());
+                context.dealDamageToPlayer(context.isUpgraded() ? 1 : 3);
+            },
+            false,
+            true,
+            true);
+
+    /**
      * 锻造：升级玩家选中的一张手牌。
      *
      * <p>具体目标由前端通过 targetCardId 传入，最终注入到当前卡牌效果上下文。
@@ -127,84 +175,81 @@ public final class CardLibrary {
             true,
             false);
 
-    // ---------- 血之代价角色卡（显式升级效果：升级只改数值、不降费用） ----------
+    // ---------- 血之代价角色卡 ----------
 
     public static final Card BLOOD_ATTACK = new Card(
             "blood_attack",
             "攻击",
             CardType.ATTACK,
             1,
-            "造成 6 点伤害。",
-            context -> context.dealDamageToMonster(6),
+            "造成 6 点伤害，升级后造成 9 点伤害。",
+            "造成 9 点伤害。",
+            context -> context.dealDamageToMonster(
+                    context.isUpgraded() ? 9 : 6),
             false,
             true,
-            true,
-            context -> context.dealDamageToMonster(9));
+            true);
 
     public static final Card BLOOD_DEFEND = new Card(
             "blood_defend",
             "防御",
             CardType.SKILL,
             1,
-            "获得 6 点护甲。",
-            context -> context.addPlayerBlock(6),
+            "获得 6 点护甲，升级后获得 9 点护甲。",
+            "获得 9 点护甲。",
+            context -> context.addPlayerBlock(
+                    context.isUpgraded() ? 9 : 6),
             false,
             true,
-            true,
-            context -> context.addPlayerBlock(9));
+            true);
 
     public static final Card BLOOD_FEAST = new Card(
             "blood_feast",
             "狂宴",
             CardType.ATTACK,
             1,
-            "造成 6 点伤害。若击杀，最大生命 +1。",
+            "造成 6 点伤害，若击杀敌人最大生命值 +1；升级后造成 9 点伤害，最大生命值 +2。",
+            "造成 9 点伤害，若击杀敌人最大生命值 +2。",
             context -> {
-                context.dealDamageToMonster(6);
-                if (context.getMonsterHealth() <= 0) {
-                    context.gainMaxHealth(1);
+                boolean killed = context.dealDamageToMonster(
+                        context.isUpgraded() ? 9 : 6);
+                if (killed) {
+                    context.increasePlayerMaxHealth(
+                            context.isUpgraded() ? 2 : 1);
                 }
             },
             false,
             true,
-            true,
-            context -> {
-                context.dealDamageToMonster(9);
-                if (context.getMonsterHealth() <= 0) {
-                    context.gainMaxHealth(2);
-                }
-            });
+            true);
 
     public static final Card BLOOD_DEVOTION_STRIKE = new Card(
             "blood_devotion",
             "献身打击",
             CardType.ATTACK,
             1,
-            "造成等于当前生命值的伤害，失去 3 点生命。",
+            "造成等于当前生命值的伤害，自己失去 3 点生命；升级后自己失去 1 点生命。",
+            "造成等于当前生命值的伤害，自己失去 1 点生命。",
             context -> {
                 context.dealDamageToMonster(context.getPlayerHealth());
-                context.losePlayerHp(3);
+                context.dealDamageToPlayer(context.isUpgraded() ? 1 : 3);
             },
             false,
             true,
-            true,
-            context -> {
-                context.dealDamageToMonster(context.getPlayerHealth());
-                context.losePlayerHp(1);
-            });
+            true);
 
-    /** 能力牌示例：打出后每回合开始获得护甲（消耗，但永久牌组保留，下局可再打）。 */
+    /** 能力牌：打出后每回合开始获得护甲（消耗，但永久牌组保留，下局可再打）。 */
     public static final Card BLOOD_METALLICIZE = new Card(
             "blood_metallicize",
             "金属化",
             CardType.POWER,
             1,
-            "每回合开始获得 3 点护甲。",
-            context -> context.gainPower(new MetallicizePower(3)),
+            "每回合开始获得 3 点护甲，升级后获得 5 点护甲。",
+            "每回合开始获得 5 点护甲。",
+            context -> context.gainPower(new MetallicizePower(
+                    context.isUpgraded() ? 5 : 3)),
             true,
             true,
-            true,
-            context -> context.gainPower(new MetallicizePower(5)));
+            true);
 
     private static final Map<String, Card> CARDS = Map.ofEntries(
             Map.entry(STRIKE.id(), STRIKE),
@@ -215,6 +260,8 @@ public final class CardLibrary {
             Map.entry(IRON_WAVE.id(), IRON_WAVE),
             Map.entry(SHRUG_IT_OFF.id(), SHRUG_IT_OFF),
             Map.entry(BLOODLETTING.id(), BLOODLETTING),
+            Map.entry(FEAST.id(), FEAST),
+            Map.entry(SACRIFICE_STRIKE.id(), SACRIFICE_STRIKE),
             Map.entry(FORGE.id(), FORGE),
             Map.entry(BLOOD_ATTACK.id(), BLOOD_ATTACK),
             Map.entry(BLOOD_DEFEND.id(), BLOOD_DEFEND),

@@ -12,11 +12,11 @@ public record Card(
         CardType type,
         int cost,
         String description,
+        String upgradedDescription,
         CardEffect effect,
         boolean exhausts,
         boolean playable,
-        boolean upgradable,
-        CardEffect upgradedEffect) {
+        boolean upgradable) {
 
     public Card {
         if (cost < 0) {
@@ -25,8 +25,7 @@ public record Card(
     }
 
     /**
-     * 兼容旧调用：没有显式升级效果的卡牌，升级沿用通用规则
-     * （费用减 1 + 数值放大 1.25 倍）。
+     * 兼容旧调用：升级说明默认与普通说明相同。
      */
     public Card(
             String id,
@@ -38,7 +37,17 @@ public record Card(
             boolean exhausts,
             boolean playable,
             boolean upgradable) {
-        this(id, name, type, cost, description, effect, exhausts, playable, upgradable, null);
+        this(
+                id,
+                name,
+                type,
+                cost,
+                description,
+                description,
+                effect,
+                exhausts,
+                playable,
+                upgradable);
     }
 
     /**

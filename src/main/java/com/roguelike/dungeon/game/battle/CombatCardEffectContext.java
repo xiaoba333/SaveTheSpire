@@ -22,37 +22,37 @@ public final class CombatCardEffectContext implements CardEffectContext {
     private final CardPiles piles;
     private final Consumer<String> logger;
     private final Consumer<CardInstance> cardUpgradeHandler;
-    private final double effectMultiplier;
     private final String targetCardId;
+    private final boolean upgraded;
 
     /**
      * @param state 当前战斗状态
      * @param logger 已有战斗日志输出（不新增回放能力）
      * @param cardUpgradeHandler 手牌升级后同步永久牌组
-     * @param effectMultiplier 卡牌效果倍率，普通牌为 1.0，升级牌为 1.25
      * @param targetCardId 锻造牌要升级的目标手牌实例 id；非锻造牌为 null
+     * @param upgraded 当前打出的牌实例是否已经升级
      */
     public CombatCardEffectContext(
             BattleState state,
             Consumer<String> logger,
             Consumer<CardInstance> cardUpgradeHandler,
-            double effectMultiplier,
-            String targetCardId) {
+            String targetCardId,
+            boolean upgraded) {
         this.state = Objects.requireNonNull(state, "战斗状态不能为 null");
         this.player = state.getPlayer();
         this.piles = state.getPiles();
         this.logger = Objects.requireNonNull(logger, "日志处理器不能为 null");
         this.cardUpgradeHandler = Objects.requireNonNull(
                 cardUpgradeHandler, "卡牌升级处理器不能为 null");
-        this.effectMultiplier = effectMultiplier;
         this.targetCardId = targetCardId;
+        this.upgraded = upgraded;
     }
 
     @Override
-    public void dealDamageToMonster(int amount) {
-        int scaled = scaleAmount(amount);
-        int dealt = state.applyDamage(true, scaled);
+    public boolean dealDamageToMonster(int amount) {
+        int dealt = state.applyDamage(true, normalizeAmount(amount));
         log("对怪物造成 " + dealt + " 点伤害。");
+        return state.getMonsterHp() <= 0;
     }
 
     @Override
@@ -60,9 +60,8 @@ public final class CombatCardEffectContext implements CardEffectContext {
         if (amount <= 0) {
             return;
         }
-        int scaled = scaleAmount(amount);
-        state.addMonsterBlock(scaled);
-        log("怪物获得 " + scaled + " 点护甲。");
+        state.addMonsterBlock(amount);
+        log("怪物获得 " + amount + " 点护甲。");
     }
 
     @Override
@@ -77,9 +76,8 @@ public final class CombatCardEffectContext implements CardEffectContext {
         if (amount <= 0) {
             return;
         }
-        int scaled = scaleAmount(amount);
-        player.addArmor(scaled);
-        log("玩家获得 " + scaled + " 点护甲。");
+        player.addArmor(amount);
+        log("玩家获得 " + amount + " 点护甲。");
     }
 
     @Override
@@ -88,8 +86,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
             return;
         }
         int before = player.getHealth();
-        int scaled = scaleAmount(amount);
-        player.heal(scaled);
+        player.heal(amount);
         log("玩家恢复 " + (player.getHealth() - before) + " 点生命。");
     }
 
@@ -110,6 +107,21 @@ public final class CombatCardEffectContext implements CardEffectContext {
     }
 
     @Override
+    public boolean isUpgraded() {
+        return upgraded;
+    }
+
+    @Override
+    public int getPlayerHealth() {
+        return player.getHealth();
+    }
+
+    @Override
+    public void increasePlayerMaxHealth(int amount) {
+        player.increaseMaxHealth(amount);
+    }
+
+    @Override
     public boolean upgradeCard() {
         if (targetCardId == null || targetCardId.isBlank()) {
             log("未选择锻造目标。");
@@ -121,7 +133,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
             return false;
         }
         cardUpgradeHandler.accept(upgraded);
-        log("「" + upgraded.card().name() + "」已升级。");
+        log("「" + upgraded.displayName() + "」已升级。");
         return true;
     }
 
@@ -132,31 +144,6 @@ public final class CombatCardEffectContext implements CardEffectContext {
     }
 
     @Override
-    public void gainMaxHealth(int amount) {
-        if (amount <= 0) {
-            return;
-        }
-        player.increaseMaxHealth(amount);
-        log("最大生命提升 " + amount + " 点。");
-    }
-
-    @Override
-    public int getPlayerHealth() {
-        return player.getHealth();
-    }
-
-    @Override
-    public int getMonsterHealth() {
-        return state.getMonsterHp();
-    }
-
-    @Override
-    public void losePlayerHp(int amount) {
-        int lost = player.takeDamage(normalizeAmount(amount));
-        log("玩家失去 " + lost + " 点生命。");
-    }
-
-    @Override
     public void log(String line) {
         logger.accept(line);
     }
@@ -164,18 +151,5 @@ public final class CombatCardEffectContext implements CardEffectContext {
     /** 把负数伤害修正为 0，避免无效负数进入伤害结算。 */
     private int normalizeAmount(int amount) {
         return Math.max(0, amount);
-    }
-
-    /**
-     * 按当前牌实例的升级倍率缩放数值。
-     *
-     * @param amount 原始数值
-     * @return 缩放后数值，四舍五入且不为负数
-     */
-    private int scaleAmount(int amount) {
-        if (amount <= 0) {
-            return 0;
-        }
-        return Math.max(0, (int) Math.round(amount * effectMultiplier));
     }
 }

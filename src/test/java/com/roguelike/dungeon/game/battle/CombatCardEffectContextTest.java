@@ -17,7 +17,7 @@ class CombatCardEffectContextTest {
     @Test
     void strikeEffectShouldDamageMonsterWithoutCombat() {
         BattleState state = readyState();
-        CombatCardEffectContext context = newContext(state, 1.0);
+        CombatCardEffectContext context = newContext(state, false);
 
         CardLibrary.STRIKE.effect().apply(context);
 
@@ -27,27 +27,25 @@ class CombatCardEffectContextTest {
     @Test
     void defendEffectShouldAddPlayerArmor() {
         BattleState state = readyState();
-        CombatCardEffectContext context = newContext(state, 1.0);
+        CombatCardEffectContext context = newContext(state, false);
 
         CardLibrary.DEFEND.effect().apply(context);
 
-        assertEquals(5, state.getPlayer().getArmor());
+        assertEquals(6, state.getPlayer().getArmor());
     }
 
     @Test
-    void upgradedMultiplierShouldScaleMonsterDamage() {
+    void upgradedFlagShouldBeExposedToCardEffects() {
         BattleState state = readyState();
-        CombatCardEffectContext context = newContext(state, 1.25);
+        CombatCardEffectContext context = newContext(state, true);
 
-        context.dealDamageToMonster(8);
-
-        assertEquals(20, state.getMonsterHp());
+        assertTrue(context.isUpgraded());
     }
 
     @Test
     void selfDamageShouldIgnoreUpgradeMultiplier() {
         BattleState state = readyState();
-        CombatCardEffectContext context = newContext(state, 1.25);
+        CombatCardEffectContext context = newContext(state, false);
 
         context.dealDamageToPlayer(3);
 
@@ -60,7 +58,7 @@ class CombatCardEffectContextTest {
         List<CardInstance> upgraded = new ArrayList<>();
         String targetId = state.getPiles().getHand().getFirst().id();
         CombatCardEffectContext context = new CombatCardEffectContext(
-                state, line -> { }, upgraded::add, 1.0, targetId);
+                state, line -> { }, upgraded::add, targetId, false);
 
         assertTrue(context.upgradeCard());
         assertEquals(1, upgraded.size());
@@ -80,8 +78,9 @@ class CombatCardEffectContextTest {
         return state;
     }
 
-    private static CombatCardEffectContext newContext(BattleState state, double multiplier) {
+    private static CombatCardEffectContext newContext(
+            BattleState state, boolean upgraded) {
         return new CombatCardEffectContext(
-                state, line -> { }, card -> { }, multiplier, null);
+                state, line -> { }, card -> { }, null, upgraded);
     }
 }

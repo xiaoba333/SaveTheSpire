@@ -36,7 +36,9 @@ public final class GameFlowDebugMain {
             CardLibrary.HEAVY_STRIKE,
             CardLibrary.IRON_WAVE,
             CardLibrary.SHRUG_IT_OFF,
-            CardLibrary.BLOODLETTING);
+            CardLibrary.BLOODLETTING,
+            CardLibrary.FEAST,
+            CardLibrary.SACRIFICE_STRIKE);
 
     private final Scanner scanner;
     private final GameController controller;
@@ -259,11 +261,10 @@ public final class GameFlowDebugMain {
         System.out.println("手牌：");
         for (int i = 0; i < combat.getHand().size(); i++) {
             CardInstance instance = combat.getHand().get(i);
-            Card card = instance.card();
-            System.out.println("  " + i + " - " + card.label()
+            System.out.println("  " + i + " - " + instance.displayName()
                     + " [" + instance.effectiveCost() + "费"
                     + (instance.upgraded() ? ",已升级" : "") + "]"
-                    + " | " + card.description());
+                    + " | " + instance.displayDescription());
         }
         if (combat.getHand().isEmpty()) {
             System.out.println("  （空）");

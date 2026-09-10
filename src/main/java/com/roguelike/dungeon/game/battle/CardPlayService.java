@@ -1,7 +1,6 @@
 package com.roguelike.dungeon.game.battle;
 
 import com.roguelike.dungeon.game.card.Card;
-import com.roguelike.dungeon.game.card.CardEffect;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
@@ -81,31 +80,28 @@ public final class CardPlayService {
         CardInstance instance = piles.peekHand(handIndex);
         Card card = instance.card();
         if (!card.playable()) {
-            logger.accept("「" + card.name() + "」无法打出。");
+            logger.accept("「" + instance.displayName() + "」无法打出。");
             return PlayCardResult.CARD_NOT_PLAYABLE;
         }
 
         int actualCost = instance.effectiveCost();
         if (!tryConsumeEnergy(player, actualCost)) {
-            logger.accept("能量不足，无法打出「" + card.name() + "」。");
+            logger.accept("能量不足，无法打出「" + instance.displayName() + "」。");
             return PlayCardResult.NOT_ENOUGH_ENERGY;
         }
 
         piles.removeFromHand(handIndex);
-        logger.accept("玩家打出「" + card.name() + "」，消耗 " + actualCost + " 点能量。");
-        CardEffect effect = card.effect();
-        double effectMultiplier = 1.0;
-        if (instance.upgraded() && card.upgradedEffect() != null) {
-            effect = card.upgradedEffect();
-        } else if (instance.upgraded()) {
-            effectMultiplier = 1.25;
-        }
-        effect.apply(new CombatCardEffectContext(
-                state, logger, cardUpgradeHandler, effectMultiplier, targetCardId));
+        logger.accept("玩家打出「" + instance.displayName() + "」，消耗 " + actualCost + " 点能量。");
+        card.effect().apply(new CombatCardEffectContext(
+                state,
+                logger,
+                cardUpgradeHandler,
+                targetCardId,
+                instance.upgraded()));
 
         if (card.exhausts()) {
             piles.sendToExhaust(instance);
-            logger.accept("「" + card.name() + "」已消耗。");
+            logger.accept("「" + instance.displayName() + "」已消耗。");
         } else {
             piles.sendToDiscard(instance);
         }
