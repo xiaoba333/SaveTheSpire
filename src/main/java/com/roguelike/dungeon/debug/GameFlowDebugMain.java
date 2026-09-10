@@ -9,8 +9,14 @@ import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
+import com.roguelike.dungeon.game.campfire.CampfireAction;
+import com.roguelike.dungeon.game.campfire.CampfireActionResult;
+import com.roguelike.dungeon.game.campfire.CampfireActionStatus;
 import com.roguelike.dungeon.game.character.CharacterDefinition;
 import com.roguelike.dungeon.game.character.GameCharacterCatalog;
+import com.roguelike.dungeon.game.event.EventChoice;
+import com.roguelike.dungeon.game.event.EventChoiceResult;
+import com.roguelike.dungeon.game.event.GameEvent;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapTextRenderer;
 import com.roguelike.dungeon.game.reward.BattleReward;
@@ -119,7 +125,9 @@ public final class GameFlowDebugMain {
                 case MAP -> handleMap();
                 case BATTLE -> handleBattle();
                 case REWARD -> handleReward();
-                case EVENT, SHOP, REST -> handlePlaceholderLevel();
+                case EVENT -> handleEvent();
+                case REST -> handleCampfire();
+                case SHOP -> handlePlaceholderLevel();
                 case VICTORY -> {
                     printRunSummary("恭喜通关！");
                     running = false;
@@ -220,6 +228,115 @@ public final class GameFlowDebugMain {
             System.out.println("请输入奖励编号或 skip。");
         } catch (IllegalArgumentException | IllegalStateException exception) {
             System.out.println("无法领取奖励：" + exception.getMessage());
+        }
+    }
+
+    private void handleEvent() {
+        while (running && controller.getPhase() == GamePhase.EVENT) {
+            GameEvent event = controller.getCurrentEvent().orElseThrow();
+            List<EventChoice> choices = controller.getCurrentEventChoices();
+            System.out.println("\n=== " + event.title() + " ===");
+            System.out.println(event.description());
+            for (int i = 0; i < choices.size(); i++) {
+                EventChoice choice = choices.get(i);
+                System.out.println("  " + i + " - " + choice.label()
+                        + " | " + choice.description()
+                        + (choice.available()
+                        ? ""
+                        : "（不可选：" + choice.unavailableReason() + "）"));
+            }
+
+            String input = readLine("请输入事件选项编号：");
+            if (!running) {
+                return;
+            }
+            try {
+                int index = Integer.parseInt(input);
+                if (index < 0 || index >= choices.size()) {
+                    System.out.println("事件选项编号超出范围。");
+                    continue;
+                }
+                EventChoiceResult result = controller.chooseEventChoice(
+                        choices.get(index).id());
+                System.out.println(result.message());
+            } catch (NumberFormatException exception) {
+                System.out.println("请输入整数事件选项编号。");
+            }
+        }
+    }
+
+    private void handleCampfire() {
+        while (running && controller.getPhase() == GamePhase.REST) {
+            RunState state = controller.getRunState();
+            List<CampfireAction> actions = controller.getCurrentCampfireActions();
+            System.out.println("\n=== 篝火 ===");
+            System.out.println("当前生命：" + state.getPlayer().getHealth()
+                    + " / " + state.getPlayer().getMaxHealth());
+            for (int i = 0; i < actions.size(); i++) {
+                CampfireAction action = actions.get(i);
+                System.out.println("  " + i + " - " + action.label()
+                        + " | " + action.description()
+                        + (action.available()
+                        ? ""
+                        : "（不可选：" + action.unavailableReason() + "）"));
+            }
+
+            String input = readLine("请输入篝火操作编号：");
+            if (!running) {
+                return;
+            }
+            try {
+                int index = Integer.parseInt(input);
+                if (index < 0 || index >= actions.size()) {
+                    System.out.println("篝火操作编号超出范围。");
+                    continue;
+                }
+                CampfireActionResult result = executeCampfireAction(actions.get(index));
+                if (result != null) {
+                    System.out.println(result.message());
+                }
+            } catch (NumberFormatException exception) {
+                System.out.println("请输入整数篝火操作编号。");
+            }
+        }
+    }
+
+    private CampfireActionResult executeCampfireAction(CampfireAction action) {
+        return switch (action.id()) {
+            case "rest" -> controller.restAtCampfire();
+            case "smith" -> chooseCampfireCard();
+            case "leave" -> controller.leaveCampfire();
+            default -> throw new IllegalStateException("未知篝火操作：" + action.id());
+        };
+    }
+
+    private CampfireActionResult chooseCampfireCard() {
+        List<CardInstance> cards = controller.getCampfireUpgradeableCards();
+        if (cards.isEmpty()) {
+            return controller.smithAtCampfire("");
+        }
+        System.out.println("可升级卡牌：");
+        for (int i = 0; i < cards.size(); i++) {
+            CardInstance card = cards.get(i);
+            System.out.println("  " + i + " - " + card.displayName()
+                    + " | " + card.displayDescription());
+        }
+        String input = readLine("请输入要升级的卡牌编号：");
+        if (!running) {
+            return null;
+        }
+        try {
+            int index = Integer.parseInt(input);
+            if (index < 0 || index >= cards.size()) {
+                return new CampfireActionResult(
+                        CampfireActionStatus.CARD_NOT_FOUND,
+                        "卡牌编号超出范围。");
+            }
+            return controller.smithAtCampfire(cards.get(index).id());
+        } catch (NumberFormatException exception) {
+            return new CampfireActionResult(
+                    CampfireActionStatus.CARD_NOT_FOUND,
+                    "请输入整数卡牌编号。");
         }
     }
 

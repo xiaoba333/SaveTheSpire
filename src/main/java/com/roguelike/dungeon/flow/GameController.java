@@ -6,6 +6,15 @@ import com.roguelike.dungeon.game.battle.MonsterAi;
 import com.roguelike.dungeon.game.battle.MonsterAiService;
 import com.roguelike.dungeon.game.battle.MonsterCatalog;
 import com.roguelike.dungeon.game.card.Card;
+import com.roguelike.dungeon.game.card.CardInstance;
+import com.roguelike.dungeon.game.campfire.CampfireAction;
+import com.roguelike.dungeon.game.campfire.CampfireActionResult;
+import com.roguelike.dungeon.game.campfire.CampfireService;
+import com.roguelike.dungeon.game.event.EventCatalog;
+import com.roguelike.dungeon.game.event.EventChoice;
+import com.roguelike.dungeon.game.event.EventChoiceResult;
+import com.roguelike.dungeon.game.event.EventService;
+import com.roguelike.dungeon.game.event.GameEvent;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
 import com.roguelike.dungeon.game.map.MapService;
@@ -35,6 +44,8 @@ public final class GameController implements LevelFinishHandler {
     private GamePhase phase = GamePhase.MAP;
     private Combat currentCombat;
     private RewardService currentReward;
+    private EventService currentEvent;
+    private CampfireService currentCampfire;
 
     public GameController(
             RunState runState,
@@ -77,6 +88,28 @@ public final class GameController implements LevelFinishHandler {
                 : Optional.of(currentReward.getReward());
     }
 
+    /** 当前事件基础信息；不在事件阶段时为空。 */
+    public Optional<GameEvent> getCurrentEvent() {
+        return currentEvent == null
+                ? Optional.empty()
+                : Optional.of(currentEvent.getEvent());
+    }
+
+    /** 当前事件根据玩家状态计算出的选项。 */
+    public List<EventChoice> getCurrentEventChoices() {
+        return currentEvent == null ? List.of() : currentEvent.getChoices();
+    }
+
+    /** 当前篝火根据玩家状态计算出的操作。 */
+    public List<CampfireAction> getCurrentCampfireActions() {
+        return currentCampfire == null ? List.of() : currentCampfire.getActions();
+    }
+
+    /** 当前篝火可以选择锻造的永久牌组卡牌。 */
+    public List<CardInstance> getCampfireUpgradeableCards() {
+        return currentCampfire == null ? List.of() : currentCampfire.getUpgradeableCards();
+    }
+
     /**
      * 在地图阶段选择一个可达节点，并进入对应关卡。
      */
@@ -86,9 +119,9 @@ public final class GameController implements LevelFinishHandler {
 
         switch (node.type()) {
             case BATTLE, ELITE, BOSS -> startBattle();
-            case EVENT -> phase = GamePhase.EVENT;
+            case EVENT -> startEvent(node);
             case SHOP -> phase = GamePhase.SHOP;
-            case REST -> phase = GamePhase.REST;
+            case REST -> startCampfire();
         }
         return node;
     }
@@ -122,6 +155,30 @@ public final class GameController implements LevelFinishHandler {
         finishReward();
     }
 
+    /** 提交当前事件的一个选项。成功后事件节点会自动结算。 */
+    public EventChoiceResult chooseEventChoice(String choiceId) {
+        requirePhase(GamePhase.EVENT);
+        return currentEvent.choose(choiceId);
+    }
+
+    /** 在当前篝火休息并结算节点。 */
+    public CampfireActionResult restAtCampfire() {
+        requirePhase(GamePhase.REST);
+        return currentCampfire.rest();
+    }
+
+    /** 在当前篝火升级一张永久牌组卡牌并结算节点。 */
+    public CampfireActionResult smithAtCampfire(String cardInstanceId) {
+        requirePhase(GamePhase.REST);
+        return currentCampfire.smith(cardInstanceId);
+    }
+
+    /** 不进行操作，离开当前篝火并结算节点。 */
+    public CampfireActionResult leaveCampfire() {
+        requirePhase(GamePhase.REST);
+        return currentCampfire.leave();
+    }
+
     private void startBattle() {
         phase = GamePhase.BATTLE;
         MapNode node = requireCurrentNode();
@@ -132,6 +189,19 @@ public final class GameController implements LevelFinishHandler {
                 this,
                 runState::upgradeCard,
                 pickMonster(node));
+    }
+
+    private void startEvent(MapNode node) {
+        phase = GamePhase.EVENT;
+        currentEvent = EventCatalog.openEvent(
+                runState,
+                eventSeed(node),
+                this);
+    }
+
+    private void startCampfire() {
+        phase = GamePhase.REST;
+        currentCampfire = new CampfireService(runState, this);
     }
 
     /** 按节点类型挑选怪物：普通战斗按种子挑一只轻松怪，精英走普通 AI，Boss 走 Boss AI。 */
@@ -181,6 +251,8 @@ public final class GameController implements LevelFinishHandler {
     }
 
     private void finishNonBattleLevel(LevelResult result) {
+        currentEvent = null;
+        currentCampfire = null;
         if (result == LevelResult.DEFEATED) {
             phase = GamePhase.DEFEAT;
             return;
@@ -204,6 +276,10 @@ public final class GameController implements LevelFinishHandler {
         long seed = runState.getRunSeed();
         seed = seed * 31 + runState.getCurrentAct();
         return seed * 31 + node.id();
+    }
+
+    private long eventSeed(MapNode node) {
+        return rewardSeed(node) ^ 0xC6A4A7935BD1E995L;
     }
 
     private void requirePhase(GamePhase expected) {
