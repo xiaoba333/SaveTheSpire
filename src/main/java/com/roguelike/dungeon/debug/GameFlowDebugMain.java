@@ -197,6 +197,11 @@ public final class GameFlowDebugMain {
         BattleReward reward = controller.getCurrentReward().orElseThrow();
         System.out.println("\n=== 战斗奖励 ===");
         System.out.println("金币：" + reward.gold());
+        if (reward.hasRelic()) {
+            System.out.println("遗物：" + reward.relic().name()
+                    + "（" + reward.relic().rarity().displayName() + "）"
+                    + " | " + reward.relic().description());
+        }
         if (reward.cardChoices().isEmpty()) {
             System.out.println("本次没有可选卡牌，输入 skip 领取金币。");
         } else {
@@ -420,6 +425,13 @@ public final class GameFlowDebugMain {
         System.out.println("牌堆：抽牌 " + combat.getDrawPileSize()
                 + " / 弃牌 " + combat.getDiscardPileSize()
                 + " / 消耗 " + combat.getExhaustPileSize());
+        if (!combat.getRelics().isEmpty()) {
+            System.out.println("遗物：");
+            combat.getRelics().forEach(relic ->
+                    System.out.println("  - " + relic.name()
+                            + "（" + relic.rarity().displayName() + "）"
+                            + " | " + relic.description()));
+        }
     }
 
     private void printRunSummary(String title) {
