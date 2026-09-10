@@ -17,6 +17,7 @@ public final class CardLibrary {
             CardType.ATTACK,
             1,
             "造成 6 点伤害，升级后造成 9 点伤害。",
+            "对一名敌人造成 9 点伤害。",
             context -> context.dealDamageToMonster(
                     context.isUpgraded() ? 9 : 6),
             false,
@@ -29,6 +30,7 @@ public final class CardLibrary {
             CardType.SKILL,
             1,
             "获得 6 点护甲，升级后获得 9 点护甲。",
+            "获得 9 点护甲。",
             context -> context.addPlayerBlock(
                     context.isUpgraded() ? 9 : 6),
             false,
@@ -121,6 +123,7 @@ public final class CardLibrary {
             CardType.ATTACK,
             1,
             "造成 6 点伤害，若击杀敌人最大生命值 +1；升级后造成 9 点伤害，最大生命值 +2。",
+            "对一名敌人造成 9 点伤害，若击杀敌人最大生命值 +2。",
             context -> {
                 boolean killed = context.dealDamageToMonster(
                         context.isUpgraded() ? 9 : 6);
@@ -144,6 +147,7 @@ public final class CardLibrary {
             CardType.ATTACK,
             1,
             "造成等于当前生命值的伤害，自己失去 3 点生命；升级后自己失去 1 点生命。",
+            "对一名敌人造成等于当前生命值的伤害，自己失去 1 点生命。",
             context -> {
                 context.dealDamageToMonster(context.getPlayerHealth());
                 context.dealDamageToPlayer(context.isUpgraded() ? 1 : 3);

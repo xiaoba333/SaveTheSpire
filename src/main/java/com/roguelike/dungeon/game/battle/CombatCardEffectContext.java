@@ -132,7 +132,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
             return false;
         }
         cardUpgradeHandler.accept(upgraded);
-        log("「" + upgraded.card().name() + "」已升级。");
+        log("「" + upgraded.displayName() + "」已升级。");
         return true;
     }
 

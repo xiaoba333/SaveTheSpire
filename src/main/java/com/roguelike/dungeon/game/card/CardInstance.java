@@ -29,6 +29,16 @@ public record CardInstance(String id, Card card, boolean upgraded) {
         return new CardInstance(id, card, true);
     }
 
+    /** 当前实例的显示名称；升级牌在原名后追加「+」。 */
+    public String displayName() {
+        return upgraded ? card.name() + "+" : card.name();
+    }
+
+    /** 当前实例的卡牌说明。 */
+    public String displayDescription() {
+        return upgraded ? card.upgradedDescription() : card.description();
+    }
+
     /**
      * 计算实际能量费用。
      *
