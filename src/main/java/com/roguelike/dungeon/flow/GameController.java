@@ -1,6 +1,7 @@
 package com.roguelike.dungeon.flow;
 
 import com.roguelike.dungeon.game.battle.Combat;
+import com.roguelike.dungeon.game.battle.CombatFactory;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
@@ -120,7 +121,9 @@ public final class GameController implements LevelFinishHandler {
 
     private void startBattle() {
         phase = GamePhase.BATTLE;
-        currentCombat = new Combat(
+        MapNode node = requireCurrentNode();
+        currentCombat = CombatFactory.createForNode(
+                node.type(),
                 runState.getPlayer(),
                 runState.getDeck(),
                 combatLogger,

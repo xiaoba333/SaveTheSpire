@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 import com.roguelike.dungeon.game.battle.Combat;
+import com.roguelike.dungeon.game.battle.CombatFactory;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 
@@ -101,7 +102,7 @@ public class App extends Application {
         buildPileOverlay();
         StackPane root = new StackPane(gameRoot, pileOverlay);
 
-        combat = new Combat(line -> combatLog.appendText(line + "\n"));
+        combat = CombatFactory.createDemo(line -> combatLog.appendText(line + "\n"));
         refreshView();
 
         Scene scene = new Scene(root, 860, 600);

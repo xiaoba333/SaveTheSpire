@@ -15,7 +15,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * 杀戮尖塔风格的最小战斗规则：抽牌、能量、出牌、结束回合、怪物攻防交替、护盾抵伤。
+ * 战斗调度器：只管理回合生命周期，具体出牌与怪物 AI 交给下层服务。
  */
 public class Combat {
 
@@ -26,23 +26,11 @@ public class Combat {
     public static final int HAND_SIZE = 5;
     public static final int PLAYER_MAX_ENERGY = 3;
 
+    private final BattleState state;
+    private final BattleEventBus eventBus;
+    private final CardPlayService cardPlayService;
+    private final MonsterAiService monsterAi;
     private final Consumer<String> logger;
-    private final CardPiles piles;
-    private final Player player;
-    private final List<CardInstance> battleDeck;
-    private final LevelFinishHandler finishHandler;
-    private final Consumer<CardInstance> cardUpgradeHandler;
-
-    private int monsterHp;
-    private int monsterBlock;
-    /** true 表示怪物下一次行动是攻击，false 表示给自己叠护盾。 */
-    private boolean monsterWillAttack;
-    private boolean playerTurn;
-    private boolean finished;
-    private String resultText;
-    private String resultCode;
-    private int turnNumber;
-    private boolean finishNotified;
     private final List<String> newLogs = new ArrayList<>();
 
     /**
@@ -54,7 +42,8 @@ public class Combat {
                 createDefaultDeck(),
                 logger,
                 result -> { },
-                upgradedCard -> { });
+                upgradedCard -> { },
+                MonsterAiService.regular());
     }
 
     /**
@@ -82,76 +71,97 @@ public class Combat {
             Consumer<String> logger,
             LevelFinishHandler finishHandler,
             Consumer<CardInstance> cardUpgradeHandler) {
-        this.player = Objects.requireNonNull(player, "玩家不能为 null");
-        this.battleDeck = List.copyOf(Objects.requireNonNull(
-                battleDeck, "战斗牌组不能为 null"));
+        this(
+                player,
+                battleDeck,
+                logger,
+                finishHandler,
+                cardUpgradeHandler,
+                MonsterAiService.regular());
+    }
+
+    /**
+     * 完整装配：可注入怪物 AI（普通怪 / Boss）。
+     */
+    public Combat(
+            Player player,
+            List<CardInstance> battleDeck,
+            Consumer<String> logger,
+            LevelFinishHandler finishHandler,
+            Consumer<CardInstance> cardUpgradeHandler,
+            MonsterAiService monsterAi) {
+        Objects.requireNonNull(player, "玩家不能为 null");
+        Objects.requireNonNull(battleDeck, "战斗牌组不能为 null");
+        Objects.requireNonNull(finishHandler, "关卡结束处理器不能为 null");
+        Objects.requireNonNull(cardUpgradeHandler, "卡牌升级处理器不能为 null");
         this.logger = Objects.requireNonNull(logger, "日志处理器不能为 null");
-        this.finishHandler = Objects.requireNonNull(
-                finishHandler, "关卡结束处理器不能为 null");
-        this.cardUpgradeHandler = Objects.requireNonNull(
-                cardUpgradeHandler, "卡牌升级处理器不能为 null");
-        this.piles = new CardPiles(logger);
+        this.monsterAi = Objects.requireNonNull(monsterAi, "怪物 AI 不能为 null");
+        this.state = new BattleState(
+                player, battleDeck, new CardPiles(logger), MONSTER_MAX_HP);
+        this.eventBus = new BattleEventBus();
+        this.eventBus.subscribeFinished(finishHandler);
+        this.cardPlayService = new CardPlayService(this::log, cardUpgradeHandler);
         startNewFight();
     }
 
     public int getPlayerHp() {
-        return player.getHealth();
+        return state.getPlayer().getHealth();
     }
 
     public int getPlayerBlock() {
-        return player.getArmor();
+        return state.getPlayer().getArmor();
     }
 
     public int getMonsterHp() {
-        return monsterHp;
+        return state.getMonsterHp();
     }
 
     public int getMonsterBlock() {
-        return monsterBlock;
+        return state.getMonsterBlock();
     }
 
     public int getEnergy() {
-        return player.getEnergy();
+        return state.getPlayer().getEnergy();
     }
 
     public int getPlayerMaxHp() {
-        return player.getMaxHealth();
+        return state.getPlayer().getMaxHealth();
     }
 
     public int getPlayerMaxEnergy() {
-        return player.getMaxEnergy();
+        return state.getPlayer().getMaxEnergy();
     }
 
     public int getMonsterMaxHp() {
-        return MONSTER_MAX_HP;
+        return state.getMonsterMaxHp();
     }
 
     public int getTurnNumber() {
-        return turnNumber;
+        return state.getTurnNumber();
     }
 
     public int getDrawPileSize() {
-        return piles.getDrawPileSize();
+        return state.getPiles().getDrawPileSize();
     }
 
     public int getDiscardPileSize() {
-        return piles.getDiscardPileSize();
+        return state.getPiles().getDiscardPileSize();
     }
 
     public int getExhaustPileSize() {
-        return piles.getExhaustPileSize();
+        return state.getPiles().getExhaustPileSize();
     }
 
     public boolean isPlayerTurn() {
-        return playerTurn && !finished;
+        return state.isPlayerTurn() && !state.isFinished();
     }
 
     public boolean isFinished() {
-        return finished;
+        return state.isFinished();
     }
 
     public String getResultText() {
-        return resultText;
+        return state.getResultText();
     }
 
     /**
@@ -160,53 +170,49 @@ public class Combat {
      * @return "VICTORY"、"DEFEAT" 或 null
      */
     public String getResult() {
-        return resultCode;
+        return state.getResultCode();
     }
 
     /**
      * 返回当前战斗阶段。HTTP 接口采用同步结束回合，因此不需要暴露 MONSTER_TURN。
      */
     public String getPhase() {
-        if (resultCode != null) {
-            return resultCode;
+        if (state.getResultCode() != null) {
+            return state.getResultCode();
         }
         return "PLAYER_TURN";
     }
 
     public List<CardInstance> getHand() {
-        return piles.getHand();
+        return state.getPiles().getHand();
     }
 
     /** 抽牌堆快照，仅供调试界面查看。下一张在列表末尾。 */
     public List<Card> getDrawPile() {
-        return piles.getDrawPile().stream()
+        return state.getPiles().getDrawPile().stream()
                 .map(CardInstance::card)
                 .toList();
     }
 
     /** 弃牌堆快照，仅供调试界面查看。最近弃入的在列表末尾。 */
     public List<Card> getDiscardPile() {
-        return piles.getDiscardPile().stream()
+        return state.getPiles().getDiscardPile().stream()
                 .map(CardInstance::card)
                 .toList();
     }
 
     /** 界面展示怪物下一动，方便看清攻防循环。 */
     public String getMonsterIntent() {
-        if (finished) {
-            return "已倒下";
-        }
-        return monsterWillAttack ? "下回合：攻击 " + MONSTER_ATTACK : "下回合：防御 +" + MONSTER_BLOCK;
+        return monsterAi.intentText(state);
     }
 
     /** 结构化怪物意图，供 HTTP 层序列化为 JSON。 */
     public Intent getMonsterIntentInfo() {
-        if (finished) {
+        MonsterAiService.IntentSnapshot snapshot = monsterAi.intentInfo(state);
+        if (snapshot == null) {
             return null;
         }
-        return monsterWillAttack
-                ? new Intent("ATTACK", MONSTER_ATTACK)
-                : new Intent("DEFEND", MONSTER_BLOCK);
+        return new Intent(snapshot.type(), snapshot.value());
     }
 
     /**
@@ -222,63 +228,22 @@ public class Combat {
      * 点击手牌时调用。只能在玩家回合打出。
      */
     public PlayCardResult playCard(int handIndex) {
-        if (finished) {
-            return PlayCardResult.BATTLE_FINISHED;
+        PlayCardResult result = cardPlayService.play(state, handIndex);
+        if (result == PlayCardResult.SUCCESS) {
+            checkFinished();
         }
-        if (!playerTurn) {
-            return PlayCardResult.NOT_PLAYER_TURN;
-        }
-        if (handIndex < 0 || handIndex >= piles.getHandSize()) {
-            return PlayCardResult.INVALID_CARD;
-        }
-        return playCardInternal(handIndex);
+        return result;
     }
 
     /**
      * 供 HTTP 等外部调用方使用的出牌入口，按牌实例 id 出牌。
      */
     public PlayCardResult playCard(String cardInstanceId) {
-        if (finished) {
-            return PlayCardResult.BATTLE_FINISHED;
+        PlayCardResult result = cardPlayService.play(state, cardInstanceId);
+        if (result == PlayCardResult.SUCCESS) {
+            checkFinished();
         }
-        if (!playerTurn) {
-            return PlayCardResult.NOT_PLAYER_TURN;
-        }
-        int handIndex = piles.findHandIndex(cardInstanceId);
-        if (handIndex < 0) {
-            return PlayCardResult.INVALID_CARD;
-        }
-        return playCardInternal(handIndex);
-    }
-
-    private PlayCardResult playCardInternal(int handIndex) {
-        CardInstance instance = piles.peekHand(handIndex);
-        Card card = instance.card();
-        if (!card.playable()) {
-            log("「" + card.name() + "」无法打出。");
-            return PlayCardResult.CARD_NOT_PLAYABLE;
-        }
-
-        int actualCost = instance.effectiveCost();
-        if (!tryConsumeEnergy(actualCost)) {
-            log("能量不足，无法打出「" + card.name() + "」。");
-            return PlayCardResult.NOT_ENOUGH_ENERGY;
-        }
-
-        piles.removeFromHand(handIndex);
-        log("玩家打出「" + card.name() + "」，消耗 " + actualCost + " 点能量。");
-        double effectMultiplier = instance.upgraded() ? 1.25 : 1.0;
-        card.effect().apply(new CombatCardEffectContext(
-                this, player, piles, effectMultiplier));
-
-        if (card.exhausts()) {
-            piles.sendToExhaust(instance);
-            log("「" + card.name() + "」已消耗。");
-        } else {
-            piles.sendToDiscard(instance);
-        }
-        checkFinished();
-        return PlayCardResult.SUCCESS;
+        return result;
     }
 
     /**
@@ -289,41 +254,47 @@ public class Combat {
             return;
         }
 
-        piles.discardHand();
+        state.getPiles().discardHand();
         log("玩家结束回合。");
 
-        if (finished) {
+        if (state.isFinished()) {
             return;
         }
 
-        runMonsterTurn();
-        if (finished) {
+        MonsterAiService.MonsterTurnResult monsterResult = monsterAi.executeTurn(state);
+        if (monsterResult.attacked()) {
+            log("怪物攻击，对玩家造成 " + monsterResult.value() + " 点伤害。");
+        } else {
+            log("怪物防御，获得 " + monsterResult.value() + " 点护盾。");
+        }
+        checkFinished();
+        if (state.isFinished()) {
             return;
         }
 
-        turnNumber++;
+        state.setTurnNumber(state.getTurnNumber() + 1);
         beginPlayerTurn();
     }
 
     private void startNewFight() {
+        Player player = state.getPlayer();
         player.clearArmor();
         player.clearStatuses();
         player.refresh();
-        monsterHp = MONSTER_MAX_HP;
-        monsterBlock = 0;
-        monsterWillAttack = true;
-        finished = false;
-        resultText = "";
-        resultCode = null;
-        turnNumber = 1;
-        finishNotified = false;
+        state.setMonsterHp(state.getMonsterMaxHp());
+        state.setMonsterBlock(0);
+        state.setMonsterWillAttack(true);
+        state.setFinished(false);
+        state.setResultText("");
+        state.setResultCode(null);
+        state.setTurnNumber(1);
         newLogs.clear();
-        piles.initializeInstances(battleDeck);
+        state.getPiles().initializeInstances(state.getBattleDeck());
 
         log("战斗开始。玩家 HP " + player.getHealth()
-                + "，怪物 HP " + monsterHp + "。");
+                + "，怪物 HP " + state.getMonsterHp() + "。");
         checkFinished();
-        if (finished) {
+        if (state.isFinished()) {
             return;
         }
         beginPlayerTurn();
@@ -331,142 +302,48 @@ public class Combat {
 
     /** 玩家回合开始：清空自身未消耗护盾（参考杀戮尖塔），再抽满手牌。 */
     private void beginPlayerTurn() {
-        playerTurn = true;
+        Player player = state.getPlayer();
+        state.setPlayerTurn(true);
         player.clearArmor();
         player.refresh();
-        drawToHandSize();
+        state.getPiles().drawToHandSize(HAND_SIZE);
         log("—— 玩家回合 —— 能量 " + player.getEnergy()
-                + "，抽牌 " + piles.getHandSize() + " 张。");
-    }
-
-    private void runMonsterTurn() {
-        playerTurn = false;
-        // 怪物回合开始时清空自己剩余护盾，本回合再决定攻击或叠盾。
-        monsterBlock = 0;
-
-        if (monsterWillAttack) {
-            int dealt = applyDamage(false, MONSTER_ATTACK);
-            log("怪物攻击，对玩家造成 " + dealt + " 点伤害。");
-        } else {
-            monsterBlock += MONSTER_BLOCK;
-            log("怪物防御，获得 " + MONSTER_BLOCK + " 点护盾。");
-        }
-        monsterWillAttack = !monsterWillAttack;
-        checkFinished();
-    }
-
-    /**
-     * @param toMonster true 表示伤害打向怪物，false 表示打向玩家
-     * @return 实际扣掉的血量（护盾先抵消）
-     */
-    /**
-     * 结算一次伤害。
-     *
-     * <p>package-private 是为了让同包的卡牌效果上下文可以使用；
-     * 外部模块仍应通过 Combat 的公开方法操作战斗。</p>
-     *
-     * @param toMonster true 表示伤害打向怪物，false 表示打向玩家
-     * @param amount 原始伤害值
-     * @return 实际扣除的血量
-     */
-    int applyDamage(boolean toMonster, int amount) {
-        if (toMonster) {
-            int absorbed = Math.min(monsterBlock, amount);
-            monsterBlock -= absorbed;
-            int hpLoss = amount - absorbed;
-            monsterHp = Math.max(0, monsterHp - hpLoss);
-            return hpLoss;
-        }
-        return player.receiveDamage(amount);
-    }
-
-    private void drawToHandSize() {
-        piles.drawToHandSize(HAND_SIZE);
-    }
-
-    private boolean tryConsumeEnergy(int cost) {
-        if (cost < 0) {
-            return false;
-        }
-        return player.consume(cost);
+                + "，抽牌 " + state.getPiles().getHandSize() + " 张。");
     }
 
     private void checkFinished() {
-        if (finished) {
+        if (state.isFinished()) {
             return;
         }
-        if (monsterHp <= 0) {
-            finished = true;
-            playerTurn = false;
-            resultText = "胜利：怪物血量已归零。";
-            resultCode = "VICTORY";
-            log(resultText);
-            notifyFinished(LevelResult.COMPLETED);
-        } else if (player.isDead()) {
-            finished = true;
-            playerTurn = false;
-            resultText = "失败：玩家血量已归零。";
-            resultCode = "DEFEAT";
-            log(resultText);
-            notifyFinished(LevelResult.DEFEATED);
+        if (state.getMonsterHp() <= 0) {
+            state.setFinished(true);
+            state.setPlayerTurn(false);
+            state.setResultText("胜利：怪物血量已归零。");
+            state.setResultCode("VICTORY");
+            log(state.getResultText());
+            eventBus.publishFinished(LevelResult.COMPLETED);
+        } else if (state.getPlayer().isDead()) {
+            state.setFinished(true);
+            state.setPlayerTurn(false);
+            state.setResultText("失败：玩家血量已归零。");
+            state.setResultCode("DEFEAT");
+            log(state.getResultText());
+            eventBus.publishFinished(LevelResult.DEFEATED);
         }
-    }
-
-    private void notifyFinished(LevelResult result) {
-        if (finishNotified) {
-            return;
-        }
-        finishNotified = true;
-        finishHandler.onLevelFinished(result);
-    }
-
-    /**
-     * 把战斗内升级后的卡牌同步给 RunState。
-     *
-     * <p>package-private 供同包卡牌效果上下文调用。</p>
-     */
-    void notifyCardUpgraded(CardInstance upgradedCard) {
-        cardUpgradeHandler.accept(upgradedCard);
     }
 
     /**
      * 向外部日志和增量日志写入一行战斗日志。
-     *
-     * <p>同包卡牌效果上下文会调用这个方法，避免直接持有日志列表。</p>
      */
-    void log(String line) {
+    private void log(String line) {
         logger.accept(line);
         newLogs.add(line);
-    }
-
-    /**
-     * 给怪物增加护甲。
-     *
-     * <p>这个方法供同包卡牌效果上下文调用，外部逻辑仍通过卡牌效果进入。</p>
-     */
-    void addMonsterBlockInternal(int amount) {
-        if (amount <= 0) {
-            return;
-        }
-        monsterBlock += amount;
     }
 
     /**
      * 怪物下一回合意图。
      */
     public record Intent(String type, int value) {
-    }
-
-    /**
-     * 出牌结果。HTTP 层可以直接根据此枚举映射错误码。
-     */
-    public enum PlayCardResult {
-        SUCCESS,
-        NOT_PLAYER_TURN,
-        INVALID_CARD,
-        NOT_ENOUGH_ENERGY,
-        CARD_NOT_PLAYABLE,
-        BATTLE_FINISHED
     }
 
     private static List<CardInstance> createDefaultDeck() {

@@ -4,6 +4,7 @@ import com.roguelike.dungeon.flow.GameController;
 import com.roguelike.dungeon.flow.GamePhase;
 import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.game.battle.Combat;
+import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
@@ -202,8 +203,8 @@ public final class GameFlowDebugMain {
     private void playCard(Combat combat, String indexText) {
         try {
             int handIndex = Integer.parseInt(indexText);
-            Combat.PlayCardResult result = combat.playCard(handIndex);
-            if (result != Combat.PlayCardResult.SUCCESS) {
+            PlayCardResult result = combat.playCard(handIndex);
+            if (result != PlayCardResult.SUCCESS) {
                 System.out.println("出牌失败：" + result);
             }
         } catch (NumberFormatException exception) {

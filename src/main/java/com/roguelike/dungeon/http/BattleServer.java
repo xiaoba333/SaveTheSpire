@@ -1,6 +1,8 @@
 package com.roguelike.dungeon.http;
 
 import com.roguelike.dungeon.game.battle.Combat;
+import com.roguelike.dungeon.game.battle.CombatFactory;
+import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -97,7 +99,7 @@ public final class BattleServer {
     private void handleStartBattle(HttpExchange ex) throws IOException {
         String id = UUID.randomUUID().toString();
         // 独立战斗：新玩家 + 默认牌组，与 http-api.md「开始一场新战斗」语义一致。
-        Combat combat = new Combat(System.out::println);
+        Combat combat = CombatFactory.createDemo(System.out::println);
         battles.put(id, new Battle(id, combat));
         sendState(ex, battles.get(id));
         pruneIdle();
@@ -121,8 +123,8 @@ public final class BattleServer {
         battle.lastAccess = System.currentTimeMillis();
 
         String cardId = Json.field(readBody(ex), "cardId");
-        Combat.PlayCardResult result = battle.combat.playCard(cardId);
-        if (result == Combat.PlayCardResult.SUCCESS) {
+        PlayCardResult result = battle.combat.playCard(cardId);
+        if (result == PlayCardResult.SUCCESS) {
             sendState(ex, battle);
         } else {
             // 失败操作不返回状态，丢弃其产生的日志，避免串到下一次成功响应的 newLogs 里。
@@ -155,7 +157,7 @@ public final class BattleServer {
         sendJson(ex, 200, BattleStateJson.toJson(battle.id, battle.combat, logs));
     }
 
-    private static String messageFor(Combat.PlayCardResult result) {
+    private static String messageFor(PlayCardResult result) {
         return switch (result) {
             case NOT_PLAYER_TURN -> "当前不是玩家回合";
             case INVALID_CARD -> "手牌中不存在该 cardId";
