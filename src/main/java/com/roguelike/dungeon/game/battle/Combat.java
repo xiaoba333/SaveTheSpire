@@ -20,17 +20,15 @@ import java.util.function.Consumer;
 public class Combat {
 
     public static final int PLAYER_MAX_HP = 50;
-    public static final int MONSTER_MAX_HP = 30;
-    public static final int MONSTER_ATTACK = 10;
-    public static final int MONSTER_BLOCK = 10;
-    public static final int HAND_SIZE = 5;
     public static final int PLAYER_MAX_ENERGY = 3;
+    public static final int HAND_SIZE = 5;
 
     private final BattleState state;
     private final BattleEventBus eventBus;
     private final CardPlayService cardPlayService;
-    private final MonsterAiService monsterAi;
+    private final MonsterAi monsterAi;
     private final Consumer<String> logger;
+
     private final List<String> newLogs = new ArrayList<>();
 
     /**
@@ -81,7 +79,7 @@ public class Combat {
     }
 
     /**
-     * 完整装配：可注入怪物 AI（普通怪 / Boss）。
+     * 完整装配：可注入怪物 AI（普通怪 / Boss / 特定怪）。
      */
     public Combat(
             Player player,
@@ -89,7 +87,7 @@ public class Combat {
             Consumer<String> logger,
             LevelFinishHandler finishHandler,
             Consumer<CardInstance> cardUpgradeHandler,
-            MonsterAiService monsterAi) {
+            MonsterAi monsterAi) {
         Objects.requireNonNull(player, "玩家不能为 null");
         Objects.requireNonNull(battleDeck, "战斗牌组不能为 null");
         Objects.requireNonNull(finishHandler, "关卡结束处理器不能为 null");
@@ -97,7 +95,7 @@ public class Combat {
         this.logger = Objects.requireNonNull(logger, "日志处理器不能为 null");
         this.monsterAi = Objects.requireNonNull(monsterAi, "怪物 AI 不能为 null");
         this.state = new BattleState(
-                player, battleDeck, new CardPiles(logger), MONSTER_MAX_HP);
+                player, battleDeck, new CardPiles(logger), monsterAi.maxHp());
         this.eventBus = new BattleEventBus();
         this.eventBus.subscribeFinished(finishHandler);
         this.cardPlayService = new CardPlayService(this::log, cardUpgradeHandler);
@@ -114,6 +112,10 @@ public class Combat {
 
     public int getMonsterHp() {
         return state.getMonsterHp();
+    }
+
+    public String getMonsterName() {
+        return monsterAi.name();
     }
 
     public int getMonsterBlock() {
@@ -208,7 +210,7 @@ public class Combat {
 
     /** 结构化怪物意图，供 HTTP 层序列化为 JSON。 */
     public Intent getMonsterIntentInfo() {
-        MonsterAiService.IntentSnapshot snapshot = monsterAi.intentInfo(state);
+        MonsterAi.IntentSnapshot snapshot = monsterAi.intentInfo(state);
         if (snapshot == null) {
             return null;
         }
@@ -272,11 +274,11 @@ public class Combat {
             return;
         }
 
-        MonsterAiService.MonsterTurnResult monsterResult = monsterAi.executeTurn(state);
+        MonsterAi.MonsterTurnResult monsterResult = monsterAi.takeTurn(state);
         if (monsterResult.attacked()) {
-            log("怪物攻击，对玩家造成 " + monsterResult.value() + " 点伤害。");
+            log(monsterAi.name() + "攻击，对玩家造成 " + monsterResult.value() + " 点伤害。");
         } else {
-            log("怪物防御，获得 " + monsterResult.value() + " 点护盾。");
+            log(monsterAi.name() + "防御，获得 " + monsterResult.value() + " 点护盾。");
         }
         checkFinished();
         if (state.isFinished()) {
@@ -289,12 +291,11 @@ public class Combat {
 
     private void startNewFight() {
         Player player = state.getPlayer();
-        player.clearArmor();
-        player.clearStatuses();
-        player.refresh();
+        player.resetForBattle();
         state.setMonsterHp(state.getMonsterMaxHp());
         state.setMonsterBlock(0);
         state.setMonsterWillAttack(true);
+        monsterAi.startFight();
         state.setFinished(false);
         state.setResultText("");
         state.setResultCode(null);
@@ -311,12 +312,13 @@ public class Combat {
         beginPlayerTurn();
     }
 
-    /** 玩家回合开始：清空自身未消耗护盾（参考杀戮尖塔），再抽满手牌。 */
+    /** 玩家回合开始：清空自身未消耗护盾（参考杀戮尖塔），触发能力，再抽满手牌。 */
     private void beginPlayerTurn() {
         Player player = state.getPlayer();
         state.setPlayerTurn(true);
         player.clearArmor();
         player.refresh();
+        player.triggerTurnStart();
         state.getPiles().drawToHandSize(HAND_SIZE);
         log("—— 玩家回合 —— 能量 " + player.getEnergy()
                 + "，抽牌 " + state.getPiles().getHandSize() + " 张。");

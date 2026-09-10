@@ -4,6 +4,7 @@ import com.roguelike.dungeon.game.card.CardEffectContext;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.Power;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -137,6 +138,12 @@ public final class CombatCardEffectContext implements CardEffectContext {
     }
 
     @Override
+    public void gainPower(Power power) {
+        player.gainPower(power);
+        log("获得能力「" + power.name() + "」。");
+    }
+
+    @Override
     public void log(String line) {
         logger.accept(line);
     }
@@ -145,5 +152,4 @@ public final class CombatCardEffectContext implements CardEffectContext {
     private int normalizeAmount(int amount) {
         return Math.max(0, amount);
     }
-
 }

@@ -2,6 +2,9 @@ package com.roguelike.dungeon.flow;
 
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.CombatFactory;
+import com.roguelike.dungeon.game.battle.MonsterAi;
+import com.roguelike.dungeon.game.battle.MonsterAiService;
+import com.roguelike.dungeon.game.battle.MonsterCatalog;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
@@ -123,12 +126,23 @@ public final class GameController implements LevelFinishHandler {
         phase = GamePhase.BATTLE;
         MapNode node = requireCurrentNode();
         currentCombat = CombatFactory.createForNode(
-                node.type(),
                 runState.getPlayer(),
                 runState.getDeck(),
                 combatLogger,
                 this,
-                runState::upgradeCard);
+                runState::upgradeCard,
+                pickMonster(node));
+    }
+
+    /** 按节点类型挑选怪物：普通战斗按种子挑一只轻松怪，精英走普通 AI，Boss 走 Boss AI。 */
+    private MonsterAi pickMonster(MapNode node) {
+        return switch (node.type()) {
+            case BATTLE -> MonsterCatalog.randomEasy(rewardSeed(node));
+            case ELITE -> MonsterAiService.regular();
+            case BOSS -> MonsterAiService.boss();
+            default -> throw new IllegalStateException(
+                    "非战斗节点无法选取怪物: " + node.type());
+        };
     }
 
     private void finishBattle(LevelResult result) {

@@ -8,6 +8,8 @@ import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
+import com.roguelike.dungeon.game.character.CharacterDefinition;
+import com.roguelike.dungeon.game.character.GameCharacterCatalog;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapTextRenderer;
@@ -17,8 +19,8 @@ import com.roguelike.dungeon.game.run.RunState;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Scanner;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.IntStream;
 
 /**
  * 可在 IntelliJ 控制台中运行的纯文字游戏流程。
@@ -52,10 +54,17 @@ public final class GameFlowDebugMain {
         try {
             long seed = readSeed(args);
             int actCount = readActCount(args);
+            CharacterDefinition character = GameCharacterCatalog.BLOOD_PRICE_CHARACTER;
+            // 按角色定义创建 Player 与起始牌组实例（正式流程由 Mg 的 createRun 承担，这里内联到调试入口）。
+            Player player = new Player(character.maxHealth(), character.maxEnergy());
+            List<CardInstance> deck = character.startingCardIds().stream()
+                    .map(CardLibrary::byId)
+                    .map(card -> new CardInstance(UUID.randomUUID().toString(), card))
+                    .toList();
             RunState runState = new RunState(
-                    new Player(Combat.PLAYER_MAX_HP, Combat.PLAYER_MAX_ENERGY),
-                    createStartingDeck(),
-                    0,
+                    player,
+                    deck,
+                    character.startingGold(),
                     seed,
                     actCount);
             GameController controller = new GameController(
@@ -245,7 +254,7 @@ public final class GameFlowDebugMain {
                 + "    护甲：" + combat.getPlayerBlock()
                 + "    能量：" + combat.getEnergy() + " / "
                 + combat.getPlayerMaxEnergy());
-        System.out.println("怪物 HP：" + combat.getMonsterHp() + " / "
+        System.out.println(combat.getMonsterName() + " HP：" + combat.getMonsterHp() + " / "
                 + combat.getMonsterMaxHp()
                 + "    护甲：" + combat.getMonsterBlock()
                 + "    " + combat.getMonsterIntent());
@@ -295,14 +304,6 @@ public final class GameFlowDebugMain {
         System.out.println("play 0 2   - 打出锻造牌并升级编号为 2 的手牌");
         System.out.println("end        - 结束当前回合");
         System.out.println("quit       - 退出文字流程");
-    }
-
-    private static List<CardInstance> createStartingDeck() {
-        List<Card> definitions = CardLibrary.startingDeck();
-        return IntStream.range(0, definitions.size())
-                .mapToObj(index -> new CardInstance(
-                        "starter-" + (index + 1), definitions.get(index)))
-                .toList();
     }
 
     private static long readSeed(String[] args) {

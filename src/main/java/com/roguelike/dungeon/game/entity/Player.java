@@ -22,6 +22,8 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
 
     private final List<Relic> relics = new ArrayList<>();
 
+    private final List<Power> powers = new ArrayList<>();
+
     /**
      * @param maxHealth 玩家最大血量
      * @param maxEnergy 玩家每回合能量上限
@@ -234,7 +236,7 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         health = Math.min(health, maxHealth);
     }
 
-    /** 提高最大生命值；当前生命不随之恢复。 */
+    /** 提高最大生命值；当前生命不随之恢复。amount <= 0 时忽略。 */
     public void increaseMaxHealth(int amount) {
         if (amount <= 0) {
             return;
@@ -247,6 +249,32 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         health = maxHealth;
     }
 
+    // ---------- 能力 ----------
+
+    /** 获得一个能力（能力牌打出时挂载）。 */
+    public void gainPower(Power power) {
+        if (power != null) {
+            powers.add(power);
+        }
+    }
+
+    /** 当前持有的全部能力。 */
+    public List<Power> getPowers() {
+        return List.copyOf(powers);
+    }
+
+    /** 触发所有能力的「回合开始」钩子（由 Combat 在玩家回合开始时调用）。 */
+    public void triggerTurnStart() {
+        for (Power power : powers) {
+            power.onTurnStart(this);
+        }
+    }
+
+    /** 清空全部能力（每场战斗开始时调用，能力不跨战斗保留）。 */
+    public void clearPowers() {
+        powers.clear();
+    }
+
     // ---------- 战斗协作 ----------
 
     /**
@@ -257,6 +285,7 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         refresh();          // 能量回满
         clearArmor();       // 护甲清零
         clearStatuses();    // 清空本场 Buff/Debuff
+        clearPowers();      // 清空本场能力
     }
 
     /**

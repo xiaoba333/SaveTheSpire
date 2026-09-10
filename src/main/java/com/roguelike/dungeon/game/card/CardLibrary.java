@@ -1,5 +1,7 @@
 package com.roguelike.dungeon.game.card;
 
+import com.roguelike.dungeon.game.entity.MetallicizePower;
+
 import java.util.List;
 import java.util.Map;
 
@@ -173,6 +175,82 @@ public final class CardLibrary {
             true,
             false);
 
+    // ---------- 血之代价角色卡 ----------
+
+    public static final Card BLOOD_ATTACK = new Card(
+            "blood_attack",
+            "攻击",
+            CardType.ATTACK,
+            1,
+            "造成 6 点伤害，升级后造成 9 点伤害。",
+            "造成 9 点伤害。",
+            context -> context.dealDamageToMonster(
+                    context.isUpgraded() ? 9 : 6),
+            false,
+            true,
+            true);
+
+    public static final Card BLOOD_DEFEND = new Card(
+            "blood_defend",
+            "防御",
+            CardType.SKILL,
+            1,
+            "获得 6 点护甲，升级后获得 9 点护甲。",
+            "获得 9 点护甲。",
+            context -> context.addPlayerBlock(
+                    context.isUpgraded() ? 9 : 6),
+            false,
+            true,
+            true);
+
+    public static final Card BLOOD_FEAST = new Card(
+            "blood_feast",
+            "狂宴",
+            CardType.ATTACK,
+            1,
+            "造成 6 点伤害，若击杀敌人最大生命值 +1；升级后造成 9 点伤害，最大生命值 +2。",
+            "造成 9 点伤害，若击杀敌人最大生命值 +2。",
+            context -> {
+                boolean killed = context.dealDamageToMonster(
+                        context.isUpgraded() ? 9 : 6);
+                if (killed) {
+                    context.increasePlayerMaxHealth(
+                            context.isUpgraded() ? 2 : 1);
+                }
+            },
+            false,
+            true,
+            true);
+
+    public static final Card BLOOD_DEVOTION_STRIKE = new Card(
+            "blood_devotion",
+            "献身打击",
+            CardType.ATTACK,
+            1,
+            "造成等于当前生命值的伤害，自己失去 3 点生命；升级后自己失去 1 点生命。",
+            "造成等于当前生命值的伤害，自己失去 1 点生命。",
+            context -> {
+                context.dealDamageToMonster(context.getPlayerHealth());
+                context.dealDamageToPlayer(context.isUpgraded() ? 1 : 3);
+            },
+            false,
+            true,
+            true);
+
+    /** 能力牌：打出后每回合开始获得护甲（消耗，但永久牌组保留，下局可再打）。 */
+    public static final Card BLOOD_METALLICIZE = new Card(
+            "blood_metallicize",
+            "金属化",
+            CardType.POWER,
+            1,
+            "每回合开始获得 3 点护甲，升级后获得 5 点护甲。",
+            "每回合开始获得 5 点护甲。",
+            context -> context.gainPower(new MetallicizePower(
+                    context.isUpgraded() ? 5 : 3)),
+            true,
+            true,
+            true);
+
     private static final Map<String, Card> CARDS = Map.ofEntries(
             Map.entry(STRIKE.id(), STRIKE),
             Map.entry(DEFEND.id(), DEFEND),
@@ -184,7 +262,12 @@ public final class CardLibrary {
             Map.entry(BLOODLETTING.id(), BLOODLETTING),
             Map.entry(FEAST.id(), FEAST),
             Map.entry(SACRIFICE_STRIKE.id(), SACRIFICE_STRIKE),
-            Map.entry(FORGE.id(), FORGE));
+            Map.entry(FORGE.id(), FORGE),
+            Map.entry(BLOOD_ATTACK.id(), BLOOD_ATTACK),
+            Map.entry(BLOOD_DEFEND.id(), BLOOD_DEFEND),
+            Map.entry(BLOOD_FEAST.id(), BLOOD_FEAST),
+            Map.entry(BLOOD_DEVOTION_STRIKE.id(), BLOOD_DEVOTION_STRIKE),
+            Map.entry(BLOOD_METALLICIZE.id(), BLOOD_METALLICIZE));
 
     private CardLibrary() {
     }
