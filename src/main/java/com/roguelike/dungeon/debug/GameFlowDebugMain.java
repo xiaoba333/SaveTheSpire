@@ -4,6 +4,7 @@ import com.roguelike.dungeon.flow.GameController;
 import com.roguelike.dungeon.flow.GamePhase;
 import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.game.battle.Combat;
+import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
@@ -12,6 +13,9 @@ import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapTextRenderer;
 import com.roguelike.dungeon.game.reward.BattleReward;
 import com.roguelike.dungeon.game.run.RunState;
+import com.roguelike.dungeon.game.shop.ShopActionResult;
+import com.roguelike.dungeon.game.shop.ShopItem;
+import com.roguelike.dungeon.game.shop.ShopService;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -80,7 +84,8 @@ public final class GameFlowDebugMain {
                 case MAP -> handleMap();
                 case BATTLE -> handleBattle();
                 case REWARD -> handleReward();
-                case EVENT, SHOP, REST -> handlePlaceholderLevel();
+                case SHOP -> handleShop();
+                case EVENT, REST -> handlePlaceholderLevel();
                 case VICTORY -> {
                     printRunSummary("恭喜通关！");
                     running = false;
@@ -125,7 +130,7 @@ public final class GameFlowDebugMain {
         Combat combat = controller.getCurrentCombat().orElseThrow();
         while (running && controller.getPhase() == GamePhase.BATTLE) {
             printBattleState(combat);
-            String input = readLine("输入 play <手牌编号>、end 或 help：");
+            String input = readLine("输入 play <手牌编号> [锻造目标编号]、end 或 help：");
             if (!running) {
                 return;
             }
@@ -199,15 +204,128 @@ public final class GameFlowDebugMain {
         }
     }
 
-    private void playCard(Combat combat, String indexText) {
+    private void handleShop() {
+        while (running && controller.getPhase() == GamePhase.SHOP) {
+            RunState state = controller.getRunState();
+            List<ShopItem> items = controller.getCurrentShopItems();
+            List<CardInstance> removableCards = controller.getShopRemovableCards();
+
+            System.out.println("\n=== 商店 ===");
+            System.out.println("当前金币：" + state.getGold());
+            System.out.println("卡牌商品（每张 " + ShopService.CARD_PRICE + " 金币）：");
+            for (int i = 0; i < items.size(); i++) {
+                ShopItem item = items.get(i);
+                System.out.println("  " + i + " - " + item.card().label()
+                        + " | " + item.card().description());
+            }
+            if (items.isEmpty()) {
+                System.out.println("  （已售罄）");
+            }
+
+            System.out.println("删卡服务（" + ShopService.CARD_REMOVAL_PRICE
+                    + " 金币，每个商店限一次）："
+                    + (controller.isShopCardRemovalUsed() ? "已使用" : "可使用"));
+            for (int i = 0; i < removableCards.size(); i++) {
+                CardInstance instance = removableCards.get(i);
+                System.out.println("  " + i + " - " + instance.card().name()
+                        + (instance.upgraded() ? "（已升级）" : ""));
+            }
+
+            String input = readLine("输入 buy <商品编号>、remove <牌组编号>或 leave：");
+            if (!running) {
+                return;
+            }
+            if (input.equalsIgnoreCase("leave")) {
+                controller.leaveShop();
+            } else if (input.toLowerCase().startsWith("buy ")) {
+                buyShopItem(items, input.substring(4).trim());
+            } else if (input.toLowerCase().startsWith("remove ")) {
+                removeCardAtShop(removableCards, input.substring(7).trim());
+            } else {
+                System.out.println("未知命令。");
+            }
+        }
+    }
+
+    private void buyShopItem(List<ShopItem> items, String indexText) {
         try {
-            int handIndex = Integer.parseInt(indexText);
-            Combat.PlayCardResult result = combat.playCard(handIndex);
-            if (result != Combat.PlayCardResult.SUCCESS) {
+            int index = Integer.parseInt(indexText);
+            if (index < 0 || index >= items.size()) {
+                System.out.println("商品编号超出范围。");
+                return;
+            }
+            ShopItem item = items.get(index);
+            ShopActionResult result = controller.buyShopItem(item.id());
+            System.out.println(result == ShopActionResult.SUCCESS
+                    ? "购买成功：" + item.card().name()
+                    : "购买失败：" + shopResultText(result));
+        } catch (NumberFormatException exception) {
+            System.out.println("用法：buy <商品编号>，例如 buy 0");
+        }
+    }
+
+    private void removeCardAtShop(List<CardInstance> cards, String indexText) {
+        try {
+            int index = Integer.parseInt(indexText);
+            if (index < 0 || index >= cards.size()) {
+                System.out.println("牌组编号超出范围。");
+                return;
+            }
+            CardInstance card = cards.get(index);
+            ShopActionResult result = controller.removeCardAtShop(card.id());
+            System.out.println(result == ShopActionResult.SUCCESS
+                    ? "删除成功：" + card.card().name()
+                    : "删除失败：" + shopResultText(result));
+        } catch (NumberFormatException exception) {
+            System.out.println("用法：remove <牌组编号>，例如 remove 0");
+        }
+    }
+
+    private static String shopResultText(ShopActionResult result) {
+        return switch (result) {
+            case SUCCESS -> "成功";
+            case ITEM_NOT_FOUND -> "商品不存在";
+            case ITEM_ALREADY_SOLD -> "商品已售出";
+            case CARD_NOT_FOUND -> "卡牌不存在";
+            case INSUFFICIENT_GOLD -> "金币不足";
+            case CARD_REMOVAL_ALREADY_USED -> "本商店的删卡服务已使用";
+            case SHOP_CLOSED -> "商店已关闭";
+        };
+    }
+
+    private void playCard(Combat combat, String arguments) {
+        try {
+            String[] parts = arguments.trim().split("\\s+");
+            int handIndex = Integer.parseInt(parts[0]);
+            List<CardInstance> hand = combat.getHand();
+            if (handIndex < 0 || handIndex >= hand.size()) {
+                System.out.println("手牌编号超出范围。");
+                return;
+            }
+
+            CardInstance played = hand.get(handIndex);
+            PlayCardResult result;
+            if (played.card().id().equals(CardLibrary.FORGE.id())) {
+                if (parts.length < 2) {
+                    System.out.println("锻造牌需要目标：play <锻造编号> <目标编号>");
+                    return;
+                }
+                int targetIndex = Integer.parseInt(parts[1]);
+                if (targetIndex < 0 || targetIndex >= hand.size()) {
+                    System.out.println("锻造目标编号超出范围。");
+                    return;
+                }
+                String targetId = hand.get(targetIndex).id();
+                result = combat.playCard(played.id(), targetId);
+            } else {
+                result = combat.playCard(handIndex);
+            }
+
+            if (result != PlayCardResult.SUCCESS) {
                 System.out.println("出牌失败：" + result);
             }
         } catch (NumberFormatException exception) {
-            System.out.println("用法：play <手牌编号>，例如 play 0");
+            System.out.println("用法：play <手牌编号>，锻造牌请使用 play <锻造编号> <目标编号>");
         }
     }
 
@@ -224,8 +342,11 @@ public final class GameFlowDebugMain {
                 + "    " + combat.getMonsterIntent());
         System.out.println("手牌：");
         for (int i = 0; i < combat.getHand().size(); i++) {
-            Card card = combat.getHand().get(i).card();
+            CardInstance instance = combat.getHand().get(i);
+            Card card = instance.card();
             System.out.println("  " + i + " - " + card.label()
+                    + " [" + instance.effectiveCost() + "费"
+                    + (instance.upgraded() ? ",已升级" : "") + "]"
                     + " | " + card.description());
         }
         if (combat.getHand().isEmpty()) {
@@ -262,9 +383,10 @@ public final class GameFlowDebugMain {
     }
 
     private static void printBattleHelp() {
-        System.out.println("play 0  - 打出编号为 0 的手牌");
-        System.out.println("end     - 结束当前回合");
-        System.out.println("quit    - 退出文字流程");
+        System.out.println("play 0     - 打出编号为 0 的手牌");
+        System.out.println("play 0 2   - 打出锻造牌并升级编号为 2 的手牌");
+        System.out.println("end        - 结束当前回合");
+        System.out.println("quit       - 退出文字流程");
     }
 
     private static List<CardInstance> createStartingDeck() {

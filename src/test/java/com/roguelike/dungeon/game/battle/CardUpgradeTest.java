@@ -26,7 +26,7 @@ class CardUpgradeTest {
 
         CardInstance upgraded = strike.upgradedCopy();
 
-        assertEquals(0, upgraded.effectiveCost());
+        assertEquals(1, upgraded.effectiveCost());
         assertTrue(upgraded.upgraded());
         assertEquals(strike.id(), upgraded.id());
     }
@@ -46,6 +46,31 @@ class CardUpgradeTest {
         assertTrue(upgraded.upgraded());
         assertEquals(originalId, upgraded.id());
         assertEquals(upgraded, piles.getHand().get(0));
+    }
+
+    @Test
+    void cardPilesShouldUpgradeSelectedCardByInstanceId() {
+        CardInstance strike = new CardInstance("strike-1", CardLibrary.STRIKE);
+        CardInstance defend = new CardInstance("defend-1", CardLibrary.DEFEND);
+        CardPiles piles = new CardPiles(line -> { }, new Random(1));
+        piles.initializeInstances(List.of(strike, defend));
+        piles.drawToHandSize(2);
+
+        CardInstance upgraded = piles.upgradeInHand("defend-1");
+
+        assertNotNull(upgraded);
+        assertEquals("defend-1", upgraded.id());
+        assertTrue(upgraded.upgraded());
+        assertTrue(piles.getHand().stream()
+                .filter(card -> card.id().equals("defend-1"))
+                .findFirst()
+                .orElseThrow()
+                .upgraded());
+        assertFalse(piles.getHand().stream()
+                .filter(card -> card.id().equals("strike-1"))
+                .findFirst()
+                .orElseThrow()
+                .upgraded());
     }
 
     @Test

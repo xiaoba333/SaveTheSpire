@@ -1,13 +1,18 @@
 package com.roguelike.dungeon.flow;
 
 import com.roguelike.dungeon.game.battle.Combat;
+import com.roguelike.dungeon.game.battle.CombatFactory;
 import com.roguelike.dungeon.game.card.Card;
+import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
 import com.roguelike.dungeon.game.map.MapService;
 import com.roguelike.dungeon.game.reward.BattleReward;
 import com.roguelike.dungeon.game.reward.RewardService;
 import com.roguelike.dungeon.game.run.RunState;
+import com.roguelike.dungeon.game.shop.ShopActionResult;
+import com.roguelike.dungeon.game.shop.ShopItem;
+import com.roguelike.dungeon.game.shop.ShopService;
 
 import java.util.List;
 import java.util.Objects;
@@ -31,6 +36,7 @@ public final class GameController implements LevelFinishHandler {
     private GamePhase phase = GamePhase.MAP;
     private Combat currentCombat;
     private RewardService currentReward;
+    private ShopService currentShop;
 
     public GameController(
             RunState runState,
@@ -73,6 +79,20 @@ public final class GameController implements LevelFinishHandler {
                 : Optional.of(currentReward.getReward());
     }
 
+    /** 当前商店尚未售出的卡牌商品。 */
+    public List<ShopItem> getCurrentShopItems() {
+        return currentShop == null ? List.of() : currentShop.getAvailableItems();
+    }
+
+    /** 当前商店可以选择删除的永久牌组。 */
+    public List<CardInstance> getShopRemovableCards() {
+        return currentShop == null ? List.of() : currentShop.getRemovableCards();
+    }
+
+    public boolean isShopCardRemovalUsed() {
+        return currentShop != null && currentShop.isCardRemovalUsed();
+    }
+
     /**
      * 在地图阶段选择一个可达节点，并进入对应关卡。
      */
@@ -83,7 +103,7 @@ public final class GameController implements LevelFinishHandler {
         switch (node.type()) {
             case BATTLE, ELITE, BOSS -> startBattle();
             case EVENT -> phase = GamePhase.EVENT;
-            case SHOP -> phase = GamePhase.SHOP;
+            case SHOP -> startShop(node);
             case REST -> phase = GamePhase.REST;
         }
         return node;
@@ -118,14 +138,43 @@ public final class GameController implements LevelFinishHandler {
         finishReward();
     }
 
+    /** 在当前商店购买卡牌。 */
+    public ShopActionResult buyShopItem(String itemId) {
+        requirePhase(GamePhase.SHOP);
+        return currentShop.buy(itemId);
+    }
+
+    /** 在当前商店删除一张永久牌组中的卡牌。 */
+    public ShopActionResult removeCardAtShop(String cardInstanceId) {
+        requirePhase(GamePhase.SHOP);
+        return currentShop.removeCard(cardInstanceId);
+    }
+
+    /** 离开当前商店，完成并解锁地图节点。 */
+    public void leaveShop() {
+        requirePhase(GamePhase.SHOP);
+        currentShop.leave();
+    }
+
     private void startBattle() {
         phase = GamePhase.BATTLE;
-        currentCombat = new Combat(
+        MapNode node = requireCurrentNode();
+        currentCombat = CombatFactory.createForNode(
+                node.type(),
                 runState.getPlayer(),
                 runState.getDeck(),
                 combatLogger,
                 this,
                 runState::upgradeCard);
+    }
+
+    private void startShop(MapNode node) {
+        phase = GamePhase.SHOP;
+        currentShop = new ShopService(
+                runState,
+                rewardPool,
+                shopSeed(node),
+                this);
     }
 
     private void finishBattle(LevelResult result) {
@@ -164,6 +213,7 @@ public final class GameController implements LevelFinishHandler {
     }
 
     private void finishNonBattleLevel(LevelResult result) {
+        currentShop = null;
         if (result == LevelResult.DEFEATED) {
             phase = GamePhase.DEFEAT;
             return;
@@ -187,6 +237,10 @@ public final class GameController implements LevelFinishHandler {
         long seed = runState.getRunSeed();
         seed = seed * 31 + runState.getCurrentAct();
         return seed * 31 + node.id();
+    }
+
+    private long shopSeed(MapNode node) {
+        return rewardSeed(node) ^ 0x5DEECE66DL;
     }
 
     private void requirePhase(GamePhase expected) {

@@ -123,6 +123,24 @@ public final class CardPiles {
             return null;
         }
         CardInstance current = hand.get(handIndex);
+        return upgradeIfPossible(current, handIndex);
+    }
+
+    /**
+     * 按实例编号升级手牌中的一张牌，并保留原实例编号。
+     *
+     * @param cardInstanceId 要升级的手牌实例 id
+     * @return 升级后的卡牌实例；找不到、不可升级或已经升级时返回 null
+     */
+    public CardInstance upgradeInHand(String cardInstanceId) {
+        int handIndex = findHandIndex(cardInstanceId);
+        if (handIndex < 0) {
+            return null;
+        }
+        return upgradeIfPossible(hand.get(handIndex), handIndex);
+    }
+
+    private CardInstance upgradeIfPossible(CardInstance current, int handIndex) {
         if (current.upgraded() || !current.card().upgradable()) {
             return null;
         }
