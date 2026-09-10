@@ -21,11 +21,11 @@ class CombatTest {
     @Test
     void playingCardConsumesEnergyAndMovesCardToDiscard() {
         List<String> logs = new ArrayList<>();
-        Combat combat = new Combat(logs::add);
+        Combat combat = newCombat(logs);
 
         assertEquals(3, combat.getEnergy());
         assertEquals(5, combat.getHand().size());
-        assertEquals(6, combat.getDrawPileSize());
+        assertEquals(5, combat.getDrawPileSize());
         assertEquals(0, combat.getDiscardPileSize());
         assertEquals(1, combat.getTurnNumber());
         assertEquals("PLAYER_TURN", combat.getPhase());
@@ -45,7 +45,7 @@ class CombatTest {
     @Test
     void canPlayCardByInstanceId() {
         List<String> logs = new ArrayList<>();
-        Combat combat = new Combat(logs::add);
+        Combat combat = newCombat(logs);
         String instanceId = combat.getHand().get(0).id();
 
         assertEquals(PlayCardResult.SUCCESS, combat.playCard(instanceId));
@@ -58,7 +58,7 @@ class CombatTest {
     @Test
     void cardCannotBePlayedWithoutEnoughEnergy() {
         List<String> logs = new ArrayList<>();
-        Combat combat = new Combat(logs::add);
+        Combat combat = newCombat(logs);
 
         combat.playCard(0);
         combat.playCard(0);
@@ -79,7 +79,7 @@ class CombatTest {
     @Test
     void endingTurnDiscardsHandAndRefreshesEnergy() {
         List<String> logs = new ArrayList<>();
-        Combat combat = new Combat(logs::add);
+        Combat combat = newCombat(logs);
 
         combat.playCard(0);
         combat.playCard(0);
@@ -131,5 +131,17 @@ class CombatTest {
         while (!combat.getHand().isEmpty() && !combat.isFinished()) {
             assertEquals(PlayCardResult.SUCCESS, combat.playCard(0));
         }
+    }
+
+    private static Combat newCombat(List<String> logs) {
+        List<CardInstance> deck = java.util.stream.IntStream.range(0, 10)
+                .mapToObj(index -> new CardInstance(
+                        "strike-" + index, CardLibrary.STRIKE))
+                .toList();
+        return new Combat(
+                new Player(Combat.PLAYER_MAX_HP, Combat.PLAYER_MAX_ENERGY),
+                deck,
+                logs::add,
+                result -> { });
     }
 }

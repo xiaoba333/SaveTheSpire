@@ -118,6 +118,44 @@ class CardPlayServiceTest {
         assertEquals(10, state.getMonsterHp());
     }
 
+    @Test
+    void bloodBurstShouldHurtPlayerAndGrantArmor() {
+        BattleState state = readyStateForCards(
+                List.of(new CardInstance("blood-burst-1", CardLibrary.BLOOD_BURST)), 3);
+        CardPlayService service = new CardPlayService(line -> { }, card -> { });
+
+        assertEquals(PlayCardResult.SUCCESS, service.play(state, "blood-burst-1"));
+
+        assertEquals(49, state.getPlayer().getHealth());
+        assertEquals(9, state.getPlayer().getArmor());
+    }
+
+    @Test
+    void bloodLordShouldDamageMonsterAndReduceMaxHealth() {
+        BattleState state = readyStateForCards(
+                List.of(new CardInstance("blood-lord-1", CardLibrary.BLOOD_LORD)), 3);
+        CardPlayService service = new CardPlayService(line -> { }, card -> { });
+
+        assertEquals(PlayCardResult.SUCCESS, service.play(state, "blood-lord-1"));
+
+        assertEquals(0, state.getMonsterHp());
+        assertEquals(49, state.getPlayer().getMaxHealth());
+    }
+
+    @Test
+    void bloodSacrificeShouldReduceMaxHealthAndGainEnergy() {
+        BattleState state = readyStateForCards(
+                List.of(new CardInstance(
+                        "blood-sacrifice-1", CardLibrary.BLOOD_SACRIFICE)), 1);
+        CardPlayService service = new CardPlayService(line -> { }, card -> { });
+
+        assertEquals(PlayCardResult.SUCCESS,
+                service.play(state, "blood-sacrifice-1"));
+
+        assertEquals(49, state.getPlayer().getMaxHealth());
+        assertEquals(3, state.getPlayer().getEnergy());
+    }
+
     private static BattleState readyState(int energy) {
         Player player = new Player(50, 3);
         player.setEnergy(energy);
