@@ -58,10 +58,11 @@ class CombatCardEffectContextTest {
     void upgradeCardShouldNotifyHandler() {
         BattleState state = readyState();
         List<CardInstance> upgraded = new ArrayList<>();
+        String targetId = state.getPiles().getHand().getFirst().id();
         CombatCardEffectContext context = new CombatCardEffectContext(
-                state, line -> { }, upgraded::add, 1.0);
+                state, line -> { }, upgraded::add, 1.0, targetId);
 
-        assertTrue(context.upgradeCard(0));
+        assertTrue(context.upgradeCard());
         assertEquals(1, upgraded.size());
         assertTrue(upgraded.getFirst().upgraded());
     }
@@ -80,6 +81,7 @@ class CombatCardEffectContextTest {
     }
 
     private static CombatCardEffectContext newContext(BattleState state, double multiplier) {
-        return new CombatCardEffectContext(state, line -> { }, card -> { }, multiplier);
+        return new CombatCardEffectContext(
+                state, line -> { }, card -> { }, multiplier, null);
     }
 }

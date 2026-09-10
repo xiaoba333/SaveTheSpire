@@ -32,7 +32,7 @@ public record CardInstance(String id, Card card, boolean upgraded) {
     /**
      * 计算实际能量费用。
      *
-     * <p>升级牌正费用统一减 1，保证升级后一定降低；0 费牌仍为 0。</p>
+     * <p>升级牌正费用统一减 1，但最低降到 1；0 费牌仍为 0。</p>
      *
      * @return 实际需要消耗的能量
      */
@@ -40,6 +40,9 @@ public record CardInstance(String id, Card card, boolean upgraded) {
         if (!upgraded || !card.upgradable()) {
             return card.cost();
         }
-        return Math.max(0, card.cost() - 1);
+        if (card.cost() <= 0) {
+            return card.cost();
+        }
+        return Math.max(1, card.cost() - 1);
     }
 }

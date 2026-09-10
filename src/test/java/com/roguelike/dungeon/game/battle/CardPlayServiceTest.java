@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CardPlayServiceTest {
 
@@ -54,6 +55,32 @@ class CardPlayServiceTest {
         assertEquals(1, state.getPiles().getDiscardPileSize());
     }
 
+    @Test
+    void forgeShouldUpgradeSelectedTargetCard() {
+        BattleState state = readyForgeState();
+        CardPlayService service = new CardPlayService(line -> { }, card -> { });
+        String forgeId = state.getPiles().getHand().stream()
+                .filter(card -> card.card().id().equals("forge"))
+                .findFirst()
+                .orElseThrow()
+                .id();
+        String strikeId = state.getPiles().getHand().stream()
+                .filter(card -> card.card().id().equals("strike"))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        assertEquals(PlayCardResult.SUCCESS,
+                service.play(state, forgeId, strikeId));
+
+        assertTrue(state.getPiles().getHand().stream()
+                .filter(card -> card.id().equals(strikeId))
+                .findFirst()
+                .orElseThrow()
+                .upgraded());
+        assertEquals(1, state.getPiles().getDiscardPileSize());
+    }
+
     private static BattleState readyState(int energy) {
         Player player = new Player(50, 3);
         player.setEnergy(energy);
@@ -61,6 +88,19 @@ class CardPlayServiceTest {
                 new CardInstance("s1", CardLibrary.STRIKE),
                 new CardInstance("d1", CardLibrary.DEFEND));
         CardPiles piles = new CardPiles(line -> { });
+        piles.initializeInstances(deck);
+        piles.drawToHandSize(2);
+        BattleState state = new BattleState(player, deck, piles, 30);
+        state.setPlayerTurn(true);
+        return state;
+    }
+
+    private static BattleState readyForgeState() {
+        Player player = new Player(50, 3);
+        List<CardInstance> deck = List.of(
+                new CardInstance("forge-1", CardLibrary.FORGE),
+                new CardInstance("strike-1", CardLibrary.STRIKE));
+        CardPiles piles = new CardPiles(line -> { }, new java.util.Random(1));
         piles.initializeInstances(deck);
         piles.drawToHandSize(2);
         BattleState state = new BattleState(player, deck, piles, 30);

@@ -22,18 +22,21 @@ public final class CombatCardEffectContext implements CardEffectContext {
     private final Consumer<String> logger;
     private final Consumer<CardInstance> cardUpgradeHandler;
     private final double effectMultiplier;
+    private final String targetCardId;
 
     /**
      * @param state 当前战斗状态
      * @param logger 已有战斗日志输出（不新增回放能力）
      * @param cardUpgradeHandler 手牌升级后同步永久牌组
      * @param effectMultiplier 卡牌效果倍率，普通牌为 1.0，升级牌为 1.25
+     * @param targetCardId 锻造牌要升级的目标手牌实例 id；非锻造牌为 null
      */
     public CombatCardEffectContext(
             BattleState state,
             Consumer<String> logger,
             Consumer<CardInstance> cardUpgradeHandler,
-            double effectMultiplier) {
+            double effectMultiplier,
+            String targetCardId) {
         this.state = Objects.requireNonNull(state, "战斗状态不能为 null");
         this.player = state.getPlayer();
         this.piles = state.getPiles();
@@ -41,6 +44,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
         this.cardUpgradeHandler = Objects.requireNonNull(
                 cardUpgradeHandler, "卡牌升级处理器不能为 null");
         this.effectMultiplier = effectMultiplier;
+        this.targetCardId = targetCardId;
     }
 
     @Override
@@ -105,8 +109,12 @@ public final class CombatCardEffectContext implements CardEffectContext {
     }
 
     @Override
-    public boolean upgradeCard(int handIndex) {
-        CardInstance upgraded = piles.upgradeInHand(handIndex);
+    public boolean upgradeCard() {
+        if (targetCardId == null || targetCardId.isBlank()) {
+            log("未选择锻造目标。");
+            return false;
+        }
+        CardInstance upgraded = piles.upgradeInHand(targetCardId);
         if (upgraded == null) {
             log("无法升级目标手牌。");
             return false;

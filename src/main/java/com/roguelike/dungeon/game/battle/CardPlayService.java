@@ -42,6 +42,18 @@ public final class CardPlayService {
 
     /** 按牌实例 id 出牌。 */
     public PlayCardResult play(BattleState state, String cardInstanceId) {
+        return play(state, cardInstanceId, null);
+    }
+
+    /**
+     * 按牌实例 id 出牌，并携带锻造目标牌实例 id。
+     *
+     * @param targetCardId 锻造牌要升级的目标手牌；非锻造牌可传 null
+     */
+    public PlayCardResult play(
+            BattleState state,
+            String cardInstanceId,
+            String targetCardId) {
         if (state.isFinished()) {
             return PlayCardResult.BATTLE_FINISHED;
         }
@@ -52,10 +64,17 @@ public final class CardPlayService {
         if (handIndex < 0) {
             return PlayCardResult.INVALID_CARD;
         }
-        return playInternal(state, handIndex);
+        return playInternal(state, handIndex, targetCardId);
     }
 
     private PlayCardResult playInternal(BattleState state, int handIndex) {
+        return playInternal(state, handIndex, null);
+    }
+
+    private PlayCardResult playInternal(
+            BattleState state,
+            int handIndex,
+            String targetCardId) {
         CardPiles piles = state.getPiles();
         Player player = state.getPlayer();
         CardInstance instance = piles.peekHand(handIndex);
@@ -75,7 +94,7 @@ public final class CardPlayService {
         logger.accept("玩家打出「" + card.name() + "」，消耗 " + actualCost + " 点能量。");
         double effectMultiplier = instance.upgraded() ? 1.25 : 1.0;
         card.effect().apply(new CombatCardEffectContext(
-                state, logger, cardUpgradeHandler, effectMultiplier));
+                state, logger, cardUpgradeHandler, effectMultiplier, targetCardId));
 
         if (card.exhausts()) {
             piles.sendToExhaust(instance);

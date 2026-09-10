@@ -99,7 +99,7 @@ public final class BattleServer {
     private void handleStartBattle(HttpExchange ex) throws IOException {
         String id = UUID.randomUUID().toString();
         // 独立战斗：新玩家 + 默认牌组，与 http-api.md「开始一场新战斗」语义一致。
-        Combat combat = CombatFactory.createDemo(System.out::println);
+        Combat combat = CombatFactory.createHttpDemo(System.out::println);
         battles.put(id, new Battle(id, combat));
         sendState(ex, battles.get(id));
         pruneIdle();
@@ -122,8 +122,10 @@ public final class BattleServer {
         }
         battle.lastAccess = System.currentTimeMillis();
 
-        String cardId = Json.field(readBody(ex), "cardId");
-        PlayCardResult result = battle.combat.playCard(cardId);
+        String body = readBody(ex);
+        String cardId = Json.field(body, "cardId");
+        String targetCardId = Json.field(body, "targetCardId");
+        PlayCardResult result = battle.combat.playCard(cardId, targetCardId);
         if (result == PlayCardResult.SUCCESS) {
             sendState(ex, battle);
         } else {
