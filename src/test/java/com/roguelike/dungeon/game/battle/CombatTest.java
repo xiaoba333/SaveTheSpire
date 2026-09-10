@@ -34,7 +34,7 @@ class CombatTest {
         assertEquals("ATTACK", combat.getMonsterIntentInfo().type());
         assertTrue(!combat.drainNewLogs().isEmpty());
 
-        assertEquals(Combat.PlayCardResult.SUCCESS, combat.playCard(0));
+        assertEquals(PlayCardResult.SUCCESS, combat.playCard(0));
 
         assertEquals(2, combat.getEnergy());
         assertEquals(4, combat.getHand().size());
@@ -48,7 +48,7 @@ class CombatTest {
         Combat combat = new Combat(logs::add);
         String instanceId = combat.getHand().get(0).id();
 
-        assertEquals(Combat.PlayCardResult.SUCCESS, combat.playCard(instanceId));
+        assertEquals(PlayCardResult.SUCCESS, combat.playCard(instanceId));
 
         assertFalse(combat.getHand().stream().anyMatch(instance -> instance.id().equals(instanceId)));
         assertEquals(4, combat.getHand().size());
@@ -129,7 +129,7 @@ class CombatTest {
 
     private static void playWholeHand(Combat combat) {
         while (!combat.getHand().isEmpty() && !combat.isFinished()) {
-            assertEquals(Combat.PlayCardResult.SUCCESS, combat.playCard(0));
+            assertEquals(PlayCardResult.SUCCESS, combat.playCard(0));
         }
     }
 }
