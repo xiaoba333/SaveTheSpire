@@ -117,8 +117,18 @@ public final class CombatCardEffectContext implements CardEffectContext {
     }
 
     @Override
+    public int getPlayerMaxHealth() {
+        return player.getMaxHealth();
+    }
+
+    @Override
     public void increasePlayerMaxHealth(int amount) {
         player.increaseMaxHealth(amount);
+    }
+
+    @Override
+    public void reducePlayerMaxHealth(int amount) {
+        player.reduceMaxHealth(amount);
     }
 
     @Override

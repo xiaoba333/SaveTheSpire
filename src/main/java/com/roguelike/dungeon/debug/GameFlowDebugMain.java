@@ -36,6 +36,10 @@ public final class GameFlowDebugMain {
             CardLibrary.IRON_WAVE,
             CardLibrary.SHRUG_IT_OFF,
             CardLibrary.BLOODLETTING,
+            CardLibrary.BLOOD_BURST,
+            CardLibrary.BLOOD_LORD,
+            CardLibrary.BLOOD_SACRIFICE,
+            CardLibrary.BLOOD_TRANSFUSION,
             CardLibrary.FEAST,
             CardLibrary.SACRIFICE_STRIKE);
 
