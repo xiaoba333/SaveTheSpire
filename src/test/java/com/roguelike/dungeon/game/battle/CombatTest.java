@@ -25,7 +25,7 @@ class CombatTest {
 
         assertEquals(3, combat.getEnergy());
         assertEquals(5, combat.getHand().size());
-        assertEquals(5, combat.getDrawPileSize());
+        assertEquals(6, combat.getDrawPileSize());
         assertEquals(0, combat.getDiscardPileSize());
         assertEquals(1, combat.getTurnNumber());
         assertEquals("PLAYER_TURN", combat.getPhase());

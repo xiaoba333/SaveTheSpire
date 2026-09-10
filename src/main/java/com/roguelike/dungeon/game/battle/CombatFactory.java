@@ -26,6 +26,20 @@ public final class CombatFactory {
         return new Combat(logger);
     }
 
+    /**
+     * HTTP 独立战斗使用的演示战斗。
+     *
+     * <p>与普通 Demo 不同，这里在起始牌组中加入锻造牌，方便 Unity 前端直接
+     * 联调“选择锻造牌 -> 选择目标手牌 -> 发送 targetCardId”的完整交互。</p>
+     */
+    public static Combat createHttpDemo(Consumer<String> logger) {
+        return new Combat(
+                new Player(Combat.PLAYER_MAX_HP, Combat.PLAYER_MAX_ENERGY),
+                forgeDemoDeck(),
+                logger,
+                result -> { });
+    }
+
     /** 与本局 RunState 共享玩家和牌组的战斗。 */
     public static Combat create(
             Player player,
@@ -74,5 +88,12 @@ public final class CombatFactory {
         return CardLibrary.startingDeck().stream()
                 .map(card -> new CardInstance(UUID.randomUUID().toString(), card))
                 .toList();
+    }
+
+    private static List<CardInstance> forgeDemoDeck() {
+        return List.of(
+                new CardInstance(UUID.randomUUID().toString(), CardLibrary.FORGE),
+                new CardInstance(UUID.randomUUID().toString(), CardLibrary.STRIKE),
+                new CardInstance(UUID.randomUUID().toString(), CardLibrary.DEFEND));
     }
 }

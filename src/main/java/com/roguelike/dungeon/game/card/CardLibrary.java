@@ -11,9 +11,6 @@ import java.util.Map;
  */
 public final class CardLibrary {
 
-    /** 锻造牌在当前 MVP 中默认升级的手牌下标。 */
-    public static final int DEFAULT_UPGRADE_HAND_INDEX = 0;
-
     public static final Card STRIKE = new Card(
             "strike",
             "打击",
@@ -112,17 +109,18 @@ public final class CardLibrary {
             true);
 
     /**
-     * 锻造：升级手牌中第一张可升级的牌。
+     * 锻造：升级玩家选中的一张手牌。
      *
-     * <p>MVP 先固定升级下标 0。锻造牌本身不可升级，避免选择自己。</p>
+     * <p>具体目标由前端通过 targetCardId 传入，最终注入到当前卡牌效果上下文。
+     * 锻造牌本身不可升级，避免选择自己。</p>
      */
     public static final Card FORGE = new Card(
             "forge",
             "锻造",
             CardType.SKILL,
             1,
-            "将手牌中第一张可升级的牌升级。",
-            context -> context.upgradeCard(DEFAULT_UPGRADE_HAND_INDEX),
+            "选择手牌中的一张牌并升级。",
+            CardEffectContext::upgradeCard,
             false,
             true,
             false);
@@ -141,11 +139,12 @@ public final class CardLibrary {
     private CardLibrary() {
     }
 
-    /** 创建基础起始牌组：5 张打击 + 5 张防御。 */
+    /** 创建基础起始牌组：5 张打击 + 5 张防御 + 1 张锻造。 */
     public static List<Card> startingDeck() {
         return List.of(
                 STRIKE, STRIKE, STRIKE, STRIKE, STRIKE,
-                DEFEND, DEFEND, DEFEND, DEFEND, DEFEND);
+                DEFEND, DEFEND, DEFEND, DEFEND, DEFEND,
+                FORGE);
     }
 
     /** 按 id 查询卡牌定义。 */

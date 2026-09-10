@@ -239,7 +239,18 @@ public class Combat {
      * 供 HTTP 等外部调用方使用的出牌入口，按牌实例 id 出牌。
      */
     public PlayCardResult playCard(String cardInstanceId) {
-        PlayCardResult result = cardPlayService.play(state, cardInstanceId);
+        return playCard(cardInstanceId, null);
+    }
+
+    /**
+     * 供 HTTP 等外部调用方使用的出牌入口，并携带锻造目标牌实例 id。
+     *
+     * @param cardInstanceId 要打出的手牌实例 id
+     * @param targetCardId 锻造牌要升级的目标手牌实例 id；普通牌可为 null
+     */
+    public PlayCardResult playCard(String cardInstanceId, String targetCardId) {
+        PlayCardResult result = cardPlayService.play(
+                state, cardInstanceId, targetCardId);
         if (result == PlayCardResult.SUCCESS) {
             checkFinished();
         }
