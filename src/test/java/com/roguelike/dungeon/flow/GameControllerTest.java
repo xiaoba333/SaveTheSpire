@@ -41,9 +41,11 @@ class GameControllerTest {
         assertEquals(player.getHealth(), combat.getPlayerHp());
         assertTrue(combat.getHand().stream().allMatch(deck::contains));
 
-        playWholeHand(combat);
-        combat.endPlayerTurn();
-        playWholeHand(combat);
+        int safety = 0;
+        while (controller.getPhase() == GamePhase.BATTLE && safety++ < 20) {
+            playWholeHand(combat);
+            combat.endPlayerTurn();
+        }
 
         assertEquals(GamePhase.REWARD, controller.getPhase());
         assertTrue(controller.getCurrentCombat().isEmpty());
@@ -68,7 +70,12 @@ class GameControllerTest {
         MapNode node = controller.getMapService().getAvailableNodes().getFirst();
         controller.selectNode(node.id());
 
-        controller.getCurrentCombat().orElseThrow().endPlayerTurn();
+        Combat combat = controller.getCurrentCombat().orElseThrow();
+        // BATTLE 节点现在按种子随机挑怪，部分怪物首回合先叠甲，循环到战斗结束。
+        int safety = 0;
+        while (controller.getPhase() == GamePhase.BATTLE && safety++ < 20) {
+            combat.endPlayerTurn();
+        }
 
         assertEquals(GamePhase.DEFEAT, controller.getPhase());
         assertEquals(0, player.getHealth());

@@ -15,12 +15,30 @@ public record Card(
         CardEffect effect,
         boolean exhausts,
         boolean playable,
-        boolean upgradable) {
+        boolean upgradable,
+        CardEffect upgradedEffect) {
 
     public Card {
         if (cost < 0) {
             throw new IllegalArgumentException("卡牌费用不能为负数");
         }
+    }
+
+    /**
+     * 兼容旧调用：没有显式升级效果的卡牌，升级沿用通用规则
+     * （费用减 1 + 数值放大 1.25 倍）。
+     */
+    public Card(
+            String id,
+            String name,
+            CardType type,
+            int cost,
+            String description,
+            CardEffect effect,
+            boolean exhausts,
+            boolean playable,
+            boolean upgradable) {
+        this(id, name, type, cost, description, effect, exhausts, playable, upgradable, null);
     }
 
     /**

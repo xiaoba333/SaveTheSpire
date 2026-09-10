@@ -3,6 +3,7 @@ package com.roguelike.dungeon.game.battle;
 import com.roguelike.dungeon.flow.LevelFinishHandler;
 import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.game.card.Card;
+import com.roguelike.dungeon.game.card.CardEffect;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
@@ -20,11 +21,8 @@ import java.util.function.Consumer;
 public class Combat {
 
     public static final int PLAYER_MAX_HP = 50;
-    public static final int MONSTER_MAX_HP = 30;
-    public static final int MONSTER_ATTACK = 10;
-    public static final int MONSTER_BLOCK = 10;
-    public static final int HAND_SIZE = 5;
     public static final int PLAYER_MAX_ENERGY = 3;
+    public static final int HAND_SIZE = 5;
 
     private final Consumer<String> logger;
     private final CardPiles piles;
@@ -32,11 +30,10 @@ public class Combat {
     private final List<CardInstance> battleDeck;
     private final LevelFinishHandler finishHandler;
     private final Consumer<CardInstance> cardUpgradeHandler;
+    private final MonsterAi monsterAi;
 
     private int monsterHp;
     private int monsterBlock;
-    /** true 表示怪物下一次行动是攻击，false 表示给自己叠护盾。 */
-    private boolean monsterWillAttack;
     private boolean playerTurn;
     private boolean finished;
     private String resultText;
@@ -54,7 +51,8 @@ public class Combat {
                 createDefaultDeck(),
                 logger,
                 result -> { },
-                upgradedCard -> { });
+                upgradedCard -> { },
+                new DefaultMonsterAi());
     }
 
     /**
@@ -82,6 +80,22 @@ public class Combat {
             Consumer<String> logger,
             LevelFinishHandler finishHandler,
             Consumer<CardInstance> cardUpgradeHandler) {
+        this(player, battleDeck, logger, finishHandler, cardUpgradeHandler,
+                new DefaultMonsterAi());
+    }
+
+    /**
+     * 创建与本局共享状态连接、指定怪物的战斗。
+     *
+     * @param monsterAi 本场战斗的怪物 AI，决定怪物的血量、意图与行动
+     */
+    public Combat(
+            Player player,
+            List<CardInstance> battleDeck,
+            Consumer<String> logger,
+            LevelFinishHandler finishHandler,
+            Consumer<CardInstance> cardUpgradeHandler,
+            MonsterAi monsterAi) {
         this.player = Objects.requireNonNull(player, "玩家不能为 null");
         this.battleDeck = List.copyOf(Objects.requireNonNull(
                 battleDeck, "战斗牌组不能为 null"));
@@ -90,6 +104,7 @@ public class Combat {
                 finishHandler, "关卡结束处理器不能为 null");
         this.cardUpgradeHandler = Objects.requireNonNull(
                 cardUpgradeHandler, "卡牌升级处理器不能为 null");
+        this.monsterAi = Objects.requireNonNull(monsterAi, "怪物 AI 不能为 null");
         this.piles = new CardPiles(logger);
         startNewFight();
     }
@@ -104,6 +119,10 @@ public class Combat {
 
     public int getMonsterHp() {
         return monsterHp;
+    }
+
+    public String getMonsterName() {
+        return monsterAi.name();
     }
 
     public int getMonsterBlock() {
@@ -123,7 +142,7 @@ public class Combat {
     }
 
     public int getMonsterMaxHp() {
-        return MONSTER_MAX_HP;
+        return monsterAi.maxHp();
     }
 
     public int getTurnNumber() {
@@ -196,7 +215,12 @@ public class Combat {
         if (finished) {
             return "已倒下";
         }
-        return monsterWillAttack ? "下回合：攻击 " + MONSTER_ATTACK : "下回合：防御 +" + MONSTER_BLOCK;
+        Intent intent = monsterAi.nextIntent();
+        return switch (intent.type()) {
+            case "ATTACK" -> "下回合：攻击 " + intent.value();
+            case "DEFEND" -> "下回合：防御 +" + intent.value();
+            default -> "下回合：" + intent.type() + " " + intent.value();
+        };
     }
 
     /** 结构化怪物意图，供 HTTP 层序列化为 JSON。 */
@@ -204,9 +228,7 @@ public class Combat {
         if (finished) {
             return null;
         }
-        return monsterWillAttack
-                ? new Intent("ATTACK", MONSTER_ATTACK)
-                : new Intent("DEFEND", MONSTER_BLOCK);
+        return monsterAi.nextIntent();
     }
 
     /**
@@ -267,8 +289,14 @@ public class Combat {
 
         piles.removeFromHand(handIndex);
         log("玩家打出「" + card.name() + "」，消耗 " + actualCost + " 点能量。");
-        double effectMultiplier = instance.upgraded() ? 1.25 : 1.0;
-        card.effect().apply(new CombatCardEffectContext(
+        CardEffect effect = card.effect();
+        double effectMultiplier = 1.0;
+        if (instance.upgraded() && card.upgradedEffect() != null) {
+            effect = card.upgradedEffect();
+        } else if (instance.upgraded()) {
+            effectMultiplier = 1.25;
+        }
+        effect.apply(new CombatCardEffectContext(
                 this, player, piles, effectMultiplier));
 
         if (card.exhausts()) {
@@ -306,12 +334,10 @@ public class Combat {
     }
 
     private void startNewFight() {
-        player.clearArmor();
-        player.clearStatuses();
-        player.refresh();
-        monsterHp = MONSTER_MAX_HP;
+        player.resetForBattle();
+        monsterHp = monsterAi.maxHp();
         monsterBlock = 0;
-        monsterWillAttack = true;
+        monsterAi.startFight();
         finished = false;
         resultText = "";
         resultCode = null;
@@ -321,7 +347,7 @@ public class Combat {
         piles.initializeInstances(battleDeck);
 
         log("战斗开始。玩家 HP " + player.getHealth()
-                + "，怪物 HP " + monsterHp + "。");
+                + "，" + monsterAi.name() + " HP " + monsterHp + "。");
         checkFinished();
         if (finished) {
             return;
@@ -329,11 +355,12 @@ public class Combat {
         beginPlayerTurn();
     }
 
-    /** 玩家回合开始：清空自身未消耗护盾（参考杀戮尖塔），再抽满手牌。 */
+    /** 玩家回合开始：清空自身未消耗护盾（参考杀戮尖塔），触发能力，再抽满手牌。 */
     private void beginPlayerTurn() {
         playerTurn = true;
         player.clearArmor();
         player.refresh();
+        player.triggerTurnStart();
         drawToHandSize();
         log("—— 玩家回合 —— 能量 " + player.getEnergy()
                 + "，抽牌 " + piles.getHandSize() + " 张。");
@@ -341,17 +368,9 @@ public class Combat {
 
     private void runMonsterTurn() {
         playerTurn = false;
-        // 怪物回合开始时清空自己剩余护盾，本回合再决定攻击或叠盾。
+        // 怪物回合开始时清空自己剩余护盾，本回合再由 AI 决定攻击或叠盾。
         monsterBlock = 0;
-
-        if (monsterWillAttack) {
-            int dealt = applyDamage(false, MONSTER_ATTACK);
-            log("怪物攻击，对玩家造成 " + dealt + " 点伤害。");
-        } else {
-            monsterBlock += MONSTER_BLOCK;
-            log("怪物防御，获得 " + MONSTER_BLOCK + " 点护盾。");
-        }
-        monsterWillAttack = !monsterWillAttack;
+        monsterAi.takeTurn(this, turnNumber);
         checkFinished();
     }
 

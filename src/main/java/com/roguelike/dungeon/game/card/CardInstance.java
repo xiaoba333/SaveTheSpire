@@ -32,12 +32,17 @@ public record CardInstance(String id, Card card, boolean upgraded) {
     /**
      * 计算实际能量费用。
      *
-     * <p>升级牌正费用统一减 1，保证升级后一定降低；0 费牌仍为 0。</p>
+     * <p>升级牌正费用统一减 1，保证升级后一定降低；0 费牌仍为 0。
+     * 但如果卡牌定义了显式升级效果（{@link Card#upgradedEffect()}），
+     * 升级只改变效果、不降低费用。</p>
      *
      * @return 实际需要消耗的能量
      */
     public int effectiveCost() {
         if (!upgraded || !card.upgradable()) {
+            return card.cost();
+        }
+        if (card.upgradedEffect() != null) {
             return card.cost();
         }
         return Math.max(0, card.cost() - 1);

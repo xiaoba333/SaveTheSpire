@@ -4,6 +4,7 @@ import com.roguelike.dungeon.game.card.CardEffectContext;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.Power;
 
 import java.util.Objects;
 
@@ -110,6 +111,37 @@ final class CombatCardEffectContext implements CardEffectContext {
         combat.notifyCardUpgraded(upgraded);
         log("「" + upgraded.card().name() + "」已升级。");
         return true;
+    }
+
+    @Override
+    public void gainPower(Power power) {
+        player.gainPower(power);
+        log("获得能力「" + power.name() + "」。");
+    }
+
+    @Override
+    public void gainMaxHealth(int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        player.increaseMaxHealth(amount);
+        log("最大生命提升 " + amount + " 点。");
+    }
+
+    @Override
+    public int getPlayerHealth() {
+        return player.getHealth();
+    }
+
+    @Override
+    public int getMonsterHealth() {
+        return combat.getMonsterHp();
+    }
+
+    @Override
+    public void losePlayerHp(int amount) {
+        int lost = player.takeDamage(normalizeAmount(amount));
+        log("玩家失去 " + lost + " 点生命。");
     }
 
     @Override

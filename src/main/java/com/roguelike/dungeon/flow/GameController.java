@@ -1,6 +1,9 @@
 package com.roguelike.dungeon.flow;
 
 import com.roguelike.dungeon.game.battle.Combat;
+import com.roguelike.dungeon.game.battle.DefaultMonsterAi;
+import com.roguelike.dungeon.game.battle.MonsterAi;
+import com.roguelike.dungeon.game.battle.MonsterCatalog;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
@@ -125,7 +128,18 @@ public final class GameController implements LevelFinishHandler {
                 runState.getDeck(),
                 combatLogger,
                 this,
-                runState::upgradeCard);
+                runState::upgradeCard,
+                pickMonster(requireCurrentNode()));
+    }
+
+    /** 按节点类型挑选怪物：普通战斗从轻松怪物池里按种子挑一只，精英 / Boss 暂用默认。 */
+    private MonsterAi pickMonster(MapNode node) {
+        return switch (node.type()) {
+            case BATTLE -> MonsterCatalog.randomEasy(rewardSeed(node));
+            case ELITE, BOSS -> new DefaultMonsterAi();
+            default -> throw new IllegalStateException(
+                    "非战斗节点无法选取怪物: " + node.type());
+        };
     }
 
     private void finishBattle(LevelResult result) {
