@@ -3,12 +3,14 @@ package com.roguelike.dungeon.debug;
 import com.roguelike.dungeon.flow.GameController;
 import com.roguelike.dungeon.flow.GamePhase;
 import com.roguelike.dungeon.flow.LevelResult;
+import com.roguelike.dungeon.flow.MenuController;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
-import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.character.CharacterDefinition;
+import com.roguelike.dungeon.game.character.GameCharacterCatalog;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapTextRenderer;
 import com.roguelike.dungeon.game.reward.BattleReward;
@@ -18,7 +20,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.IntStream;
 
 /**
  * 可在 IntelliJ 控制台中运行的纯文字游戏流程。
@@ -56,28 +57,63 @@ public final class GameFlowDebugMain {
         try {
             long seed = readSeed(args);
             int actCount = readActCount(args);
-            RunState runState = new RunState(
-                    new Player(Combat.PLAYER_MAX_HP, Combat.PLAYER_MAX_ENERGY),
-                    createStartingDeck(),
-                    0,
-                    seed,
-                    actCount);
-            GameController controller = new GameController(
-                    runState,
-                    REWARD_POOL,
-                    line -> System.out.println("[战斗] " + line));
 
             System.out.println("=== 杀戮尖塔文字流程 MVP ===");
             System.out.println("地图种子：" + seed);
             System.out.println("章节数量：" + actCount);
             System.out.println("任何阶段输入 quit 可以退出。\n");
 
+            MenuController menu = new MenuController(new GameCharacterCatalog());
+            menu.beginCharacterSelect();
+
             try (Scanner scanner = new Scanner(System.in, StandardCharsets.UTF_8)) {
+                CharacterDefinition character = chooseCharacter(scanner, menu);
+                if (character == null) {
+                    return;
+                }
+                RunState runState = menu.createRun(character.id(), seed, actCount);
+                System.out.println("已选择角色「" + character.name()
+                        + "」，最大生命 " + character.maxHealth() + "。\n");
+
+                GameController controller = new GameController(
+                        runState,
+                        REWARD_POOL,
+                        line -> System.out.println("[战斗] " + line));
                 new GameFlowDebugMain(scanner, controller).run();
             }
         } catch (IllegalArgumentException exception) {
             System.out.println(exception.getMessage());
             printUsage();
+        }
+    }
+
+    /** 让玩家从可选角色里选一个；输入 quit 返回 null。 */
+    private static CharacterDefinition chooseCharacter(
+            Scanner scanner, MenuController menu) {
+        printCharacterChoices(menu.getAvailableCharacters());
+        while (true) {
+            System.out.print("请输入角色编号（或 quit 退出）：");
+            if (!scanner.hasNextLine()) {
+                return null;
+            }
+            String input = scanner.nextLine().trim();
+            if (input.equalsIgnoreCase("quit")) {
+                System.out.println("已退出。");
+                return null;
+            }
+            try {
+                return menu.selectCharacter(input);
+            } catch (IllegalArgumentException exception) {
+                System.out.println("无法选择角色：" + exception.getMessage());
+            }
+        }
+    }
+
+    private static void printCharacterChoices(List<CharacterDefinition> characters) {
+        System.out.println("可选角色：");
+        for (CharacterDefinition character : characters) {
+            System.out.println("  " + character.id() + " - " + character.name()
+                    + "（HP " + character.maxHealth() + "）| " + character.description());
         }
     }
 
@@ -249,7 +285,7 @@ public final class GameFlowDebugMain {
                 + "    护甲：" + combat.getPlayerBlock()
                 + "    能量：" + combat.getEnergy() + " / "
                 + combat.getPlayerMaxEnergy());
-        System.out.println("怪物 HP：" + combat.getMonsterHp() + " / "
+        System.out.println(combat.getMonsterName() + " HP：" + combat.getMonsterHp() + " / "
                 + combat.getMonsterMaxHp()
                 + "    护甲：" + combat.getMonsterBlock()
                 + "    " + combat.getMonsterIntent());
@@ -299,14 +335,6 @@ public final class GameFlowDebugMain {
         System.out.println("play 0 2   - 打出锻造牌并升级编号为 2 的手牌");
         System.out.println("end        - 结束当前回合");
         System.out.println("quit       - 退出文字流程");
-    }
-
-    private static List<CardInstance> createStartingDeck() {
-        List<Card> definitions = CardLibrary.startingDeck();
-        return IntStream.range(0, definitions.size())
-                .mapToObj(index -> new CardInstance(
-                        "starter-" + (index + 1), definitions.get(index)))
-                .toList();
     }
 
     private static long readSeed(String[] args) {

@@ -4,7 +4,6 @@ import com.roguelike.dungeon.flow.LevelFinishHandler;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.entity.Player;
-import com.roguelike.dungeon.game.map.MapNodeType;
 
 import java.util.List;
 import java.util.UUID;
@@ -14,7 +13,7 @@ import java.util.function.Consumer;
  * 战斗装配工厂。
  *
  * <p>兼容旧 Demo / 单测的 {@code new Combat(logger)}，
- * 并为地图节点（含 Boss）选择对应的 {@link MonsterAiService}。</p>
+ * 并为地图节点装配指定怪物 AI（普通怪 / Boss）。</p>
  */
 public final class CombatFactory {
 
@@ -61,26 +60,17 @@ public final class CombatFactory {
     }
 
     /**
-     * 按地图节点类型装配战斗。Boss 走 {@link MonsterAiService#boss()}，
-     * 当前数值与普通怪相同，战斗结果不变。
+     * 按指定怪物 AI 装配一场战斗（调用方负责挑选普通怪 / Boss）。
      */
     public static Combat createForNode(
-            MapNodeType nodeType,
             Player player,
             List<CardInstance> battleDeck,
             Consumer<String> logger,
             LevelFinishHandler finishHandler,
-            Consumer<CardInstance> cardUpgradeHandler) {
-        MonsterAiService monsterAi = nodeType == MapNodeType.BOSS
-                ? MonsterAiService.boss()
-                : MonsterAiService.regular();
+            Consumer<CardInstance> cardUpgradeHandler,
+            MonsterAi monsterAi) {
         return new Combat(
-                player,
-                battleDeck,
-                logger,
-                finishHandler,
-                cardUpgradeHandler,
-                monsterAi);
+                player, battleDeck, logger, finishHandler, cardUpgradeHandler, monsterAi);
     }
 
     /** 起始牌组：5 打击 + 5 防御，每张独立实例 id。 */

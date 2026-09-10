@@ -21,7 +21,7 @@ class MonsterAiServiceTest {
         state.setMonsterWillAttack(true);
         MonsterAiService ai = MonsterAiService.regular();
 
-        MonsterAiService.MonsterTurnResult first = ai.executeTurn(state);
+        MonsterAi.MonsterTurnResult first = ai.takeTurn(state);
         assertTrue(first.attacked());
         assertEquals(10, first.value());
         assertEquals(40, state.getPlayer().getHealth());
@@ -29,7 +29,7 @@ class MonsterAiServiceTest {
         assertFalse(state.isMonsterWillAttack());
         assertFalse(state.isPlayerTurn());
 
-        MonsterAiService.MonsterTurnResult second = ai.executeTurn(state);
+        MonsterAi.MonsterTurnResult second = ai.takeTurn(state);
         assertFalse(second.attacked());
         assertEquals(10, second.value());
         assertEquals(10, state.getMonsterBlock());
@@ -49,7 +49,7 @@ class MonsterAiServiceTest {
         state.setMonsterWillAttack(true);
         MonsterAiService boss = new MonsterAiService(20, 15);
 
-        MonsterAiService.MonsterTurnResult result = boss.executeTurn(state);
+        MonsterAi.MonsterTurnResult result = boss.takeTurn(state);
 
         assertTrue(result.attacked());
         assertEquals(20, result.value());
