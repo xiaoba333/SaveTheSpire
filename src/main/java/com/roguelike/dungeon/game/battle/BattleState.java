@@ -3,8 +3,11 @@ package com.roguelike.dungeon.game.battle;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.StatusEffect;
 
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -22,6 +25,8 @@ public final class BattleState {
 
     private int monsterHp;
     private int monsterBlock;
+    private final Map<StatusEffect, Integer> monsterStatuses =
+            new EnumMap<>(StatusEffect.class);
     /** true 表示怪物下一次行动是攻击，false 表示给自己叠护盾。 */
     private boolean monsterWillAttack;
     private boolean playerTurn;
@@ -155,5 +160,23 @@ public final class BattleState {
             return;
         }
         monsterBlock += amount;
+    }
+
+    /** 给怪物叠加指定状态的层数。 */
+    public void addMonsterStatus(StatusEffect effect, int amount) {
+        if (effect == null) {
+            return;
+        }
+        int next = Math.max(0, monsterStatuses.getOrDefault(effect, 0) + amount);
+        if (next == 0) {
+            monsterStatuses.remove(effect);
+        } else {
+            monsterStatuses.put(effect, next);
+        }
+    }
+
+    /** 获取怪物指定状态的当前层数。 */
+    public int getMonsterStatusStacks(StatusEffect effect) {
+        return monsterStatuses.getOrDefault(effect, 0);
     }
 }

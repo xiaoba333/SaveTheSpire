@@ -1,6 +1,7 @@
 package com.roguelike.dungeon.game.card;
 
 import com.roguelike.dungeon.game.entity.MetallicizePower;
+import com.roguelike.dungeon.game.entity.StatusEffect;
 
 import java.util.List;
 import java.util.Map;
@@ -241,6 +242,7 @@ public final class CardLibrary {
             CardType.POWER,
             3,
             "当你减少自己血量上限时，改为血量上限 +1。",
+            "当你减少自己血量上限时，改为血量上限 +1。",
             context -> { },
             false,
             true,
@@ -252,7 +254,14 @@ public final class CardLibrary {
             CardType.ATTACK,
             1,
             "对自己造成 3 点伤害，对指定敌人造成 10 点伤害并给予易伤。",
-            context -> { },
+            "对自己造成 3 点伤害，对指定敌人造成 13 点伤害并给予 3 层易伤。",
+            context -> {
+                context.dealDamageToPlayer(3);
+                context.dealDamageToMonster(context.isUpgraded() ? 13 : 10);
+                context.applyStatusToMonster(
+                        StatusEffect.VULNERABLE,
+                        context.isUpgraded() ? 3 : 2);
+            },
             false,
             true,
             true);
@@ -263,6 +272,7 @@ public final class CardLibrary {
             CardType.POWER,
             1,
             "对自己造成伤害时，力量 +1；升级后力量 +2。",
+            "对自己造成伤害时，力量 +2。",
             context -> { },
             false,
             true,
@@ -274,7 +284,13 @@ public final class CardLibrary {
             CardType.POWER,
             3,
             "对自己造成 3 点伤害，本回合免疫受到的伤害。",
-            context -> { },
+            "对自己造成 3 点伤害，两回合内免疫受到的伤害。",
+            context -> {
+                context.dealDamageToPlayer(3);
+                context.applyStatusToPlayer(
+                        StatusEffect.BLOOD_POOL,
+                        context.isUpgraded() ? 2 : 1);
+            },
             false,
             true,
             true);
@@ -285,7 +301,13 @@ public final class CardLibrary {
             CardType.ATTACK,
             1,
             "对指定敌人造成 6 点伤害，并给予 1 层虚弱。",
-            context -> { },
+            "对指定敌人造成 9 点伤害，并给予 2 层虚弱。",
+            context -> {
+                context.dealDamageToMonster(context.isUpgraded() ? 9 : 6);
+                context.applyStatusToMonster(
+                        StatusEffect.WEAK,
+                        context.isUpgraded() ? 2 : 1);
+            },
             false,
             true,
             true);
@@ -296,7 +318,11 @@ public final class CardLibrary {
             CardType.ATTACK,
             2,
             "对指定敌人造成 30 点伤害，给予自己 3 层虚弱。",
-            context -> { },
+            "对指定敌人造成 40 点伤害，给予自己 3 层虚弱。",
+            context -> {
+                context.dealDamageToMonster(context.isUpgraded() ? 40 : 30);
+                context.applyStatusToPlayer(StatusEffect.WEAK, 3);
+            },
             false,
             true,
             true);
@@ -307,7 +333,10 @@ public final class CardLibrary {
             CardType.POWER,
             4,
             "对指定对象附加状态「死而复生」。",
-            context -> { },
+            "对指定对象附加状态「死而复生」。",
+            context -> {
+                context.applyStatusToPlayer(StatusEffect.REBORN, 1);
+            },
             false,
             true,
             true);
@@ -318,6 +347,7 @@ public final class CardLibrary {
             CardType.ATTACK,
             1,
             "对自己造成 1 点伤害，对所有敌人造成 6 点伤害，执行 x 次。",
+            "对自己造成 1 点伤害，对所有敌人造成 9 点伤害，执行 x 次。",
             context -> { },
             false,
             true,
@@ -329,6 +359,7 @@ public final class CardLibrary {
             CardType.SKILL,
             3,
             "给予所有敌人 99 层易伤，以及状态「血畜」。",
+            "给予所有敌人 99 层易伤，99 层虚弱，以及状态「血畜」。",
             context -> { },
             false,
             true,
@@ -451,7 +482,6 @@ public final class CardLibrary {
             Map.entry(BLOOD_REBIRTH.id(), BLOOD_REBIRTH),
             Map.entry(BLOOD_RAIN.id(), BLOOD_RAIN),
             Map.entry(DUSK_VEIL.id(), DUSK_VEIL),
-            Map.entry(FORGE.id(), FORGE));
             Map.entry(FORGE.id(), FORGE),
             Map.entry(BLOOD_ATTACK.id(), BLOOD_ATTACK),
             Map.entry(BLOOD_DEFEND.id(), BLOOD_DEFEND),
