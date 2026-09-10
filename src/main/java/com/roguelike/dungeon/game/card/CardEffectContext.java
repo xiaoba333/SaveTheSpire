@@ -8,8 +8,12 @@ package com.roguelike.dungeon.game.card;
  */
 public interface CardEffectContext {
 
-    /** 对怪物造成伤害，护甲先吸收。 */
-    void dealDamageToMonster(int amount);
+    /**
+     * 对怪物造成伤害，护甲先吸收。
+     *
+     * @return 本次伤害是否击杀怪物
+     */
+    boolean dealDamageToMonster(int amount);
 
     /** 给怪物增加护甲。 */
     void addMonsterBlock(int amount);
@@ -28,6 +32,15 @@ public interface CardEffectContext {
 
     /** 为玩家增加当前回合能量。 */
     void addPlayerEnergy(int amount);
+
+    /** 当前卡牌实例是否已经升级。 */
+    boolean isUpgraded();
+
+    /** 玩家当前生命值。 */
+    int getPlayerHealth();
+
+    /** 提高玩家最大生命值，不恢复当前生命。 */
+    void increasePlayerMaxHealth(int amount);
 
     /**
      * 升级当前卡牌效果指定的目标手牌。

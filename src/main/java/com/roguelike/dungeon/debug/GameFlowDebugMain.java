@@ -34,7 +34,9 @@ public final class GameFlowDebugMain {
             CardLibrary.HEAVY_STRIKE,
             CardLibrary.IRON_WAVE,
             CardLibrary.SHRUG_IT_OFF,
-            CardLibrary.BLOODLETTING);
+            CardLibrary.BLOODLETTING,
+            CardLibrary.FEAST,
+            CardLibrary.SACRIFICE_STRIKE);
 
     private final Scanner scanner;
     private final GameController controller;

@@ -92,9 +92,12 @@ public final class CardPlayService {
 
         piles.removeFromHand(handIndex);
         logger.accept("玩家打出「" + card.name() + "」，消耗 " + actualCost + " 点能量。");
-        double effectMultiplier = instance.upgraded() ? 1.25 : 1.0;
         card.effect().apply(new CombatCardEffectContext(
-                state, logger, cardUpgradeHandler, effectMultiplier, targetCardId));
+                state,
+                logger,
+                cardUpgradeHandler,
+                targetCardId,
+                instance.upgraded()));
 
         if (card.exhausts()) {
             piles.sendToExhaust(instance);

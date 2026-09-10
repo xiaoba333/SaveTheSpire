@@ -16,8 +16,9 @@ public final class CardLibrary {
             "打击",
             CardType.ATTACK,
             1,
-            "造成 6 点伤害。",
-            context -> context.dealDamageToMonster(6),
+            "造成 6 点伤害，升级后造成 9 点伤害。",
+            context -> context.dealDamageToMonster(
+                    context.isUpgraded() ? 9 : 6),
             false,
             true,
             true);
@@ -27,8 +28,9 @@ public final class CardLibrary {
             "防御",
             CardType.SKILL,
             1,
-            "获得 5 点护甲。",
-            context -> context.addPlayerBlock(5),
+            "获得 6 点护甲，升级后获得 9 点护甲。",
+            context -> context.addPlayerBlock(
+                    context.isUpgraded() ? 9 : 6),
             false,
             true,
             true);
@@ -109,6 +111,48 @@ public final class CardLibrary {
             true);
 
     /**
+     * 狂宴：造成伤害，若击杀敌人则提高最大生命值。
+     *
+     * <p>普通版：伤害 6，最大生命 +1；升级版：伤害 9，最大生命 +2。</p>
+     */
+    public static final Card FEAST = new Card(
+            "feast",
+            "狂宴",
+            CardType.ATTACK,
+            1,
+            "造成 6 点伤害，若击杀敌人最大生命值 +1；升级后造成 9 点伤害，最大生命值 +2。",
+            context -> {
+                boolean killed = context.dealDamageToMonster(
+                        context.isUpgraded() ? 9 : 6);
+                if (killed) {
+                    context.increasePlayerMaxHealth(
+                            context.isUpgraded() ? 2 : 1);
+                }
+            },
+            false,
+            true,
+            true);
+
+    /**
+     * 献身打击：造成等于玩家当前生命值的伤害，并损失自身生命。
+     *
+     * <p>普通版：损失 3 点生命；升级版：损失 1 点生命。</p>
+     */
+    public static final Card SACRIFICE_STRIKE = new Card(
+            "sacrifice_strike",
+            "献身打击",
+            CardType.ATTACK,
+            1,
+            "造成等于当前生命值的伤害，自己失去 3 点生命；升级后自己失去 1 点生命。",
+            context -> {
+                context.dealDamageToMonster(context.getPlayerHealth());
+                context.dealDamageToPlayer(context.isUpgraded() ? 1 : 3);
+            },
+            false,
+            true,
+            true);
+
+    /**
      * 锻造：升级玩家选中的一张手牌。
      *
      * <p>具体目标由前端通过 targetCardId 传入，最终注入到当前卡牌效果上下文。
@@ -134,6 +178,8 @@ public final class CardLibrary {
             Map.entry(IRON_WAVE.id(), IRON_WAVE),
             Map.entry(SHRUG_IT_OFF.id(), SHRUG_IT_OFF),
             Map.entry(BLOODLETTING.id(), BLOODLETTING),
+            Map.entry(FEAST.id(), FEAST),
+            Map.entry(SACRIFICE_STRIKE.id(), SACRIFICE_STRIKE),
             Map.entry(FORGE.id(), FORGE));
 
     private CardLibrary() {
