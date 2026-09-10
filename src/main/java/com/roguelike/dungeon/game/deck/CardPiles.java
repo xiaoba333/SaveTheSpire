@@ -112,6 +112,25 @@ public final class CardPiles {
         return hand.get(handIndex);
     }
 
+    /**
+     * 升级手牌中的一张牌，并保留原实例编号。
+     *
+     * @param handIndex 要升级的手牌下标
+     * @return 升级后的卡牌实例；目标不可升级或已经升级时返回 null
+     */
+    public CardInstance upgradeInHand(int handIndex) {
+        if (handIndex < 0 || handIndex >= hand.size()) {
+            return null;
+        }
+        CardInstance current = hand.get(handIndex);
+        if (current.upgraded() || !current.card().upgradable()) {
+            return null;
+        }
+        CardInstance upgraded = current.upgradedCopy();
+        hand.set(handIndex, upgraded);
+        return upgraded;
+    }
+
     /** 根据实例 id 查找手牌下标；找不到返回 -1。 */
     public int findHandIndex(String instanceId) {
         for (int i = 0; i < hand.size(); i++) {

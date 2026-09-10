@@ -29,6 +29,14 @@ public interface CardEffectContext {
     /** 为玩家增加当前回合能量。 */
     void addPlayerEnergy(int amount);
 
+    /**
+     * 升级手牌中的一张牌。
+     *
+     * @param handIndex 要升级的手牌下标
+     * @return 升级成功返回 true，否则返回 false
+     */
+    boolean upgradeCard(int handIndex);
+
     /** 向战斗日志追加一行文本。 */
     void log(String line);
 }

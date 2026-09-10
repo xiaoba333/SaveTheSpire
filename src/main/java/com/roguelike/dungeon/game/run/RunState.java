@@ -80,6 +80,27 @@ public final class RunState {
     }
 
     /**
+     * 用升级后的牌实例替换永久牌组中相同实例编号的牌。
+     *
+     * @param upgradedCard 升级后的牌实例
+     * @return 替换成功返回 true，找不到对应实例或已经升级返回 false
+     */
+    public boolean upgradeCard(CardInstance upgradedCard) {
+        validateCardInstance(upgradedCard);
+        for (int i = 0; i < deck.size(); i++) {
+            CardInstance current = deck.get(i);
+            if (current.id().equals(upgradedCard.id())) {
+                if (current.upgraded()) {
+                    return false;
+                }
+                deck.set(i, upgradedCard);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 按实例编号从永久牌组移除一张卡牌。
      *
      * @return 找到并移除时返回 true，否则返回 false

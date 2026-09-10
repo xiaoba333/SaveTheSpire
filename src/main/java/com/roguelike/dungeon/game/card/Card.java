@@ -14,7 +14,8 @@ public record Card(
         String description,
         CardEffect effect,
         boolean exhausts,
-        boolean playable) {
+        boolean playable,
+        boolean upgradable) {
 
     public Card {
         if (cost < 0) {
