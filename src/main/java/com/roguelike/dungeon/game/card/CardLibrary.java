@@ -11,6 +11,9 @@ import java.util.Map;
  */
 public final class CardLibrary {
 
+    /** 锻造牌在当前 MVP 中默认升级的手牌下标。 */
+    public static final int DEFAULT_UPGRADE_HAND_INDEX = 0;
+
     public static final Card STRIKE = new Card(
             "strike",
             "打击",
@@ -19,6 +22,7 @@ public final class CardLibrary {
             "造成 6 点伤害。",
             context -> context.dealDamageToMonster(6),
             false,
+            true,
             true);
 
     public static final Card DEFEND = new Card(
@@ -29,6 +33,7 @@ public final class CardLibrary {
             "获得 5 点护甲。",
             context -> context.addPlayerBlock(5),
             false,
+            true,
             true);
 
     public static final Card BASH = new Card(
@@ -39,6 +44,7 @@ public final class CardLibrary {
             "造成 8 点伤害。",
             context -> context.dealDamageToMonster(8),
             false,
+            true,
             true);
 
     public static final Card QUICK_SLASH = new Card(
@@ -49,6 +55,7 @@ public final class CardLibrary {
             "造成 3 点伤害。",
             context -> context.dealDamageToMonster(3),
             false,
+            true,
             true);
 
     public static final Card HEAVY_STRIKE = new Card(
@@ -59,6 +66,7 @@ public final class CardLibrary {
             "造成 12 点伤害。",
             context -> context.dealDamageToMonster(12),
             false,
+            true,
             true);
 
     public static final Card IRON_WAVE = new Card(
@@ -72,6 +80,7 @@ public final class CardLibrary {
                 context.addPlayerBlock(5);
             },
             false,
+            true,
             true);
 
     public static final Card SHRUG_IT_OFF = new Card(
@@ -85,6 +94,7 @@ public final class CardLibrary {
                 context.drawCards(1);
             },
             false,
+            true,
             true);
 
     public static final Card BLOODLETTING = new Card(
@@ -98,7 +108,24 @@ public final class CardLibrary {
                 context.addPlayerEnergy(2);
             },
             false,
+            true,
             true);
+
+    /**
+     * 锻造：升级手牌中第一张可升级的牌。
+     *
+     * <p>MVP 先固定升级下标 0。锻造牌本身不可升级，避免选择自己。</p>
+     */
+    public static final Card FORGE = new Card(
+            "forge",
+            "锻造",
+            CardType.SKILL,
+            1,
+            "将手牌中第一张可升级的牌升级。",
+            context -> context.upgradeCard(DEFAULT_UPGRADE_HAND_INDEX),
+            false,
+            true,
+            false);
 
     private static final Map<String, Card> CARDS = Map.ofEntries(
             Map.entry(STRIKE.id(), STRIKE),
@@ -108,7 +135,8 @@ public final class CardLibrary {
             Map.entry(HEAVY_STRIKE.id(), HEAVY_STRIKE),
             Map.entry(IRON_WAVE.id(), IRON_WAVE),
             Map.entry(SHRUG_IT_OFF.id(), SHRUG_IT_OFF),
-            Map.entry(BLOODLETTING.id(), BLOODLETTING));
+            Map.entry(BLOODLETTING.id(), BLOODLETTING),
+            Map.entry(FORGE.id(), FORGE));
 
     private CardLibrary() {
     }
