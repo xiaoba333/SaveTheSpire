@@ -140,8 +140,8 @@ public class App extends Application {
         for (int i = 0; i < combat.getHand().size(); i++) {
             CardInstance instance = combat.getHand().get(i);
             Card card = instance.card();
-            Button cardButton = new Button(card.label());
-            cardButton.setTooltip(new Tooltip(card.description()));
+            Button cardButton = new Button(instance.displayName());
+            cardButton.setTooltip(new Tooltip(instance.displayDescription()));
             final int index = i;
             cardButton.setDisable(!combat.isPlayerTurn() || !card.playable());
             cardButton.setOnAction(event -> {
