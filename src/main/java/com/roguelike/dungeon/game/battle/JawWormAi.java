@@ -22,11 +22,26 @@ public final class JawWormAi implements MonsterAi {
     }
 
     @Override
-    public Combat.Intent nextIntent() {
+    public String intentText(BattleState state) {
+        if (state.isFinished()) {
+            return "已倒下";
+        }
         return switch (step % 3) {
-            case 0 -> new Combat.Intent("DEFEND", CURL_BLOCK);
-            case 1 -> new Combat.Intent("ATTACK", BITE);
-            default -> new Combat.Intent("ATTACK", HEAVY_BITE);
+            case 0 -> "下回合：防御 +" + CURL_BLOCK;
+            case 1 -> "下回合：攻击 " + BITE;
+            default -> "下回合：攻击 " + HEAVY_BITE;
+        };
+    }
+
+    @Override
+    public IntentSnapshot intentInfo(BattleState state) {
+        if (state.isFinished()) {
+            return null;
+        }
+        return switch (step % 3) {
+            case 0 -> new IntentSnapshot("DEFEND", CURL_BLOCK);
+            case 1 -> new IntentSnapshot("ATTACK", BITE);
+            default -> new IntentSnapshot("ATTACK", HEAVY_BITE);
         };
     }
 
@@ -36,21 +51,18 @@ public final class JawWormAi implements MonsterAi {
     }
 
     @Override
-    public void takeTurn(Combat combat, int turnNumber) {
-        switch (step % 3) {
+    public MonsterTurnResult takeTurn(BattleState state) {
+        state.setPlayerTurn(false);
+        state.setMonsterBlock(0);
+        MonsterTurnResult result = switch (step % 3) {
             case 0 -> {
-                combat.addMonsterBlockInternal(CURL_BLOCK);
-                combat.log("颚虫蜷缩，获得 " + CURL_BLOCK + " 点护盾。");
+                state.addMonsterBlock(CURL_BLOCK);
+                yield MonsterTurnResult.defend(CURL_BLOCK);
             }
-            case 1 -> {
-                int dealt = combat.applyDamage(false, BITE);
-                combat.log("颚虫撕咬，对玩家造成 " + dealt + " 点伤害。");
-            }
-            default -> {
-                int dealt = combat.applyDamage(false, HEAVY_BITE);
-                combat.log("颚虫重撕咬，对玩家造成 " + dealt + " 点伤害。");
-            }
-        }
+            case 1 -> MonsterTurnResult.attack(state.applyDamage(false, BITE));
+            default -> MonsterTurnResult.attack(state.applyDamage(false, HEAVY_BITE));
+        };
         step++;
+        return result;
     }
 }

@@ -4,6 +4,7 @@ import com.roguelike.dungeon.flow.GameController;
 import com.roguelike.dungeon.flow.GamePhase;
 import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.game.battle.Combat;
+import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
@@ -134,7 +135,7 @@ public final class GameFlowDebugMain {
         Combat combat = controller.getCurrentCombat().orElseThrow();
         while (running && controller.getPhase() == GamePhase.BATTLE) {
             printBattleState(combat);
-            String input = readLine("输入 play <手牌编号>、end 或 help：");
+            String input = readLine("输入 play <手牌编号> [锻造目标编号]、end 或 help：");
             if (!running) {
                 return;
             }
@@ -208,15 +209,39 @@ public final class GameFlowDebugMain {
         }
     }
 
-    private void playCard(Combat combat, String indexText) {
+    private void playCard(Combat combat, String arguments) {
         try {
-            int handIndex = Integer.parseInt(indexText);
-            Combat.PlayCardResult result = combat.playCard(handIndex);
-            if (result != Combat.PlayCardResult.SUCCESS) {
+            String[] parts = arguments.trim().split("\\s+");
+            int handIndex = Integer.parseInt(parts[0]);
+            List<CardInstance> hand = combat.getHand();
+            if (handIndex < 0 || handIndex >= hand.size()) {
+                System.out.println("手牌编号超出范围。");
+                return;
+            }
+
+            CardInstance played = hand.get(handIndex);
+            PlayCardResult result;
+            if (played.card().id().equals(CardLibrary.FORGE.id())) {
+                if (parts.length < 2) {
+                    System.out.println("锻造牌需要目标：play <锻造编号> <目标编号>");
+                    return;
+                }
+                int targetIndex = Integer.parseInt(parts[1]);
+                if (targetIndex < 0 || targetIndex >= hand.size()) {
+                    System.out.println("锻造目标编号超出范围。");
+                    return;
+                }
+                String targetId = hand.get(targetIndex).id();
+                result = combat.playCard(played.id(), targetId);
+            } else {
+                result = combat.playCard(handIndex);
+            }
+
+            if (result != PlayCardResult.SUCCESS) {
                 System.out.println("出牌失败：" + result);
             }
         } catch (NumberFormatException exception) {
-            System.out.println("用法：play <手牌编号>，例如 play 0");
+            System.out.println("用法：play <手牌编号>，锻造牌请使用 play <锻造编号> <目标编号>");
         }
     }
 
@@ -233,8 +258,11 @@ public final class GameFlowDebugMain {
                 + "    " + combat.getMonsterIntent());
         System.out.println("手牌：");
         for (int i = 0; i < combat.getHand().size(); i++) {
-            Card card = combat.getHand().get(i).card();
+            CardInstance instance = combat.getHand().get(i);
+            Card card = instance.card();
             System.out.println("  " + i + " - " + card.label()
+                    + " [" + instance.effectiveCost() + "费"
+                    + (instance.upgraded() ? ",已升级" : "") + "]"
                     + " | " + card.description());
         }
         if (combat.getHand().isEmpty()) {
@@ -271,9 +299,10 @@ public final class GameFlowDebugMain {
     }
 
     private static void printBattleHelp() {
-        System.out.println("play 0  - 打出编号为 0 的手牌");
-        System.out.println("end     - 结束当前回合");
-        System.out.println("quit    - 退出文字流程");
+        System.out.println("play 0     - 打出编号为 0 的手牌");
+        System.out.println("play 0 2   - 打出锻造牌并升级编号为 2 的手牌");
+        System.out.println("end        - 结束当前回合");
+        System.out.println("quit       - 退出文字流程");
     }
 
     private static long readSeed(String[] args) {

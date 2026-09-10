@@ -18,8 +18,19 @@ public final class AcidSlimeAi implements MonsterAi {
     }
 
     @Override
-    public Combat.Intent nextIntent() {
-        return new Combat.Intent("ATTACK", ATTACK);
+    public String intentText(BattleState state) {
+        if (state.isFinished()) {
+            return "已倒下";
+        }
+        return "下回合：攻击 " + ATTACK;
+    }
+
+    @Override
+    public IntentSnapshot intentInfo(BattleState state) {
+        if (state.isFinished()) {
+            return null;
+        }
+        return new IntentSnapshot("ATTACK", ATTACK);
     }
 
     @Override
@@ -27,8 +38,10 @@ public final class AcidSlimeAi implements MonsterAi {
     }
 
     @Override
-    public void takeTurn(Combat combat, int turnNumber) {
-        int dealt = combat.applyDamage(false, ATTACK);
-        combat.log("酸液史莱姆攻击，对玩家造成 " + dealt + " 点伤害。");
+    public MonsterTurnResult takeTurn(BattleState state) {
+        state.setPlayerTurn(false);
+        state.setMonsterBlock(0);
+        int dealt = state.applyDamage(false, ATTACK);
+        return MonsterTurnResult.attack(dealt);
     }
 }

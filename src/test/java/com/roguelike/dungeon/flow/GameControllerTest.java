@@ -1,6 +1,7 @@
 package com.roguelike.dungeon.flow;
 
 import com.roguelike.dungeon.game.battle.Combat;
+import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
@@ -162,7 +163,7 @@ class GameControllerTest {
 
     private static void playWholeHand(Combat combat) {
         while (!combat.getHand().isEmpty() && !combat.isFinished()) {
-            assertEquals(Combat.PlayCardResult.SUCCESS, combat.playCard(0));
+            assertEquals(PlayCardResult.SUCCESS, combat.playCard(0));
         }
     }
 }

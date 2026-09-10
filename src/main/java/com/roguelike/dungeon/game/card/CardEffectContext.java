@@ -32,12 +32,14 @@ public interface CardEffectContext {
     void addPlayerEnergy(int amount);
 
     /**
-     * 升级手牌中的一张牌。
+     * 升级当前卡牌效果指定的目标手牌。
      *
-     * @param handIndex 要升级的手牌下标
+     * <p>目标牌由出牌流程在调用卡牌效果前注入到上下文，因此这里不需要参数。
+     * 锻造牌使用该方法升级玩家选中的目标牌；非锻造牌默认不会调用。</p>
+     *
      * @return 升级成功返回 true，否则返回 false
      */
-    boolean upgradeCard(int handIndex);
+    boolean upgradeCard();
 
     /** 获得一个能力（能力牌打出时挂到玩家身上，每回合开始触发）。 */
     void gainPower(Power power);

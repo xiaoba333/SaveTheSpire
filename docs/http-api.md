@@ -110,6 +110,9 @@
   "name": "打击",
   "type": "ATTACK",
   "cost": 1,
+  "effectiveCost": 1,
+  "upgraded": false,
+  "upgradable": true,
   "description": "造成 6 点伤害。",
   "exhausts": false,
   "playable": true
@@ -123,6 +126,9 @@
 | `name` | string | 显示名 |
 | `type` | string | `ATTACK`/`SKILL`/`POWER`/`STATUS`/`CURSE` |
 | `cost` | int | 能量费用 |
+| `effectiveCost` | int | 考虑升级后的实际能量费用 |
+| `upgraded` | bool | 当前牌实例是否已升级 |
+| `upgradable` | bool | 是否允许升级，可用于判断锻造目标 |
 | `description` | string | 效果说明 |
 | `exhausts` | bool | 打出后是否进消耗堆 |
 | `playable` | bool | 是否可打出 |
@@ -156,6 +162,14 @@ POST /api/v1/battles/{battleId}/play
 响应 200：BattleState（出牌后的最新状态）
 响应 400：错误对象（能量不足 / 非玩家回合 / 卡牌不存在 / 不可打出 / 战斗已结束）
 ```
+
+锻造牌出牌时，额外传入要升级的目标手牌实例 id：
+
+```json
+{ "cardId": "forge-instance-id", "targetCardId": "strike-instance-id" }
+```
+
+`targetCardId` 仅锻造牌使用；普通牌可以省略。
 
 ### 4.3 结束回合
 

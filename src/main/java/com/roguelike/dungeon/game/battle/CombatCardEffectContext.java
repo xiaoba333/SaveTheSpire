@@ -7,43 +7,51 @@ import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.entity.Power;
 
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * 卡牌效果与战斗状态之间的适配器。
  *
- * <p>这个类实现了 {@link CardEffectContext}。卡牌效果只调用上下文方法，
- * 不直接知道 {@link Combat}、玩家或敌人的内部字段。当前 MVP 中，
- * 玩家操作委托给 {@link Player}，怪物操作仍通过 Combat 的 package-private
- * 方法完成；后续 Combat 完全接入 Enemy 后，可以继续在这里收敛怪物操作。</p>
+ * <p>只依赖 {@link BattleState} 与回调，不引用 {@link Combat}。
+ * 卡牌效果只调用 {@link CardEffectContext} 方法。</p>
  */
-final class CombatCardEffectContext implements CardEffectContext {
+public final class CombatCardEffectContext implements CardEffectContext {
 
-    private final Combat combat;
+    private final BattleState state;
     private final Player player;
     private final CardPiles piles;
+    private final Consumer<String> logger;
+    private final Consumer<CardInstance> cardUpgradeHandler;
     private final double effectMultiplier;
+    private final String targetCardId;
 
     /**
-     * @param combat 当前战斗对象，用于怪物伤害、怪物护甲和战斗日志
-     * @param player 本局共享玩家对象
-     * @param piles            本场战斗的牌堆管理器
+     * @param state 当前战斗状态
+     * @param logger 已有战斗日志输出（不新增回放能力）
+     * @param cardUpgradeHandler 手牌升级后同步永久牌组
      * @param effectMultiplier 卡牌效果倍率，普通牌为 1.0，升级牌为 1.25
+     * @param targetCardId 锻造牌要升级的目标手牌实例 id；非锻造牌为 null
      */
-    CombatCardEffectContext(
-            Combat combat,
-            Player player,
-            CardPiles piles,
-            double effectMultiplier) {
-        this.combat = Objects.requireNonNull(combat, "战斗对象不能为 null");
-        this.player = Objects.requireNonNull(player, "玩家对象不能为 null");
-        this.piles = Objects.requireNonNull(piles, "牌堆管理器不能为 null");
+    public CombatCardEffectContext(
+            BattleState state,
+            Consumer<String> logger,
+            Consumer<CardInstance> cardUpgradeHandler,
+            double effectMultiplier,
+            String targetCardId) {
+        this.state = Objects.requireNonNull(state, "战斗状态不能为 null");
+        this.player = state.getPlayer();
+        this.piles = state.getPiles();
+        this.logger = Objects.requireNonNull(logger, "日志处理器不能为 null");
+        this.cardUpgradeHandler = Objects.requireNonNull(
+                cardUpgradeHandler, "卡牌升级处理器不能为 null");
         this.effectMultiplier = effectMultiplier;
+        this.targetCardId = targetCardId;
     }
 
     @Override
     public void dealDamageToMonster(int amount) {
         int scaled = scaleAmount(amount);
-        int dealt = combat.applyDamage(true, scaled);
+        int dealt = state.applyDamage(true, scaled);
         log("对怪物造成 " + dealt + " 点伤害。");
     }
 
@@ -53,14 +61,14 @@ final class CombatCardEffectContext implements CardEffectContext {
             return;
         }
         int scaled = scaleAmount(amount);
-        combat.addMonsterBlockInternal(scaled);
+        state.addMonsterBlock(scaled);
         log("怪物获得 " + scaled + " 点护甲。");
     }
 
     @Override
     public void dealDamageToPlayer(int amount) {
         // 自伤类卡牌不参与默认倍率，避免升级后反而更亏。
-        int dealt = combat.applyDamage(false, normalizeAmount(amount));
+        int dealt = state.applyDamage(false, normalizeAmount(amount));
         log("玩家受到 " + dealt + " 点伤害。");
     }
 
@@ -102,13 +110,17 @@ final class CombatCardEffectContext implements CardEffectContext {
     }
 
     @Override
-    public boolean upgradeCard(int handIndex) {
-        CardInstance upgraded = piles.upgradeInHand(handIndex);
+    public boolean upgradeCard() {
+        if (targetCardId == null || targetCardId.isBlank()) {
+            log("未选择锻造目标。");
+            return false;
+        }
+        CardInstance upgraded = piles.upgradeInHand(targetCardId);
         if (upgraded == null) {
             log("无法升级目标手牌。");
             return false;
         }
-        combat.notifyCardUpgraded(upgraded);
+        cardUpgradeHandler.accept(upgraded);
         log("「" + upgraded.card().name() + "」已升级。");
         return true;
     }
@@ -135,7 +147,7 @@ final class CombatCardEffectContext implements CardEffectContext {
 
     @Override
     public int getMonsterHealth() {
-        return combat.getMonsterHp();
+        return state.getMonsterHp();
     }
 
     @Override
@@ -146,7 +158,7 @@ final class CombatCardEffectContext implements CardEffectContext {
 
     @Override
     public void log(String line) {
-        combat.log(line);
+        logger.accept(line);
     }
 
     /** 把负数伤害修正为 0，避免无效负数进入伤害结算。 */

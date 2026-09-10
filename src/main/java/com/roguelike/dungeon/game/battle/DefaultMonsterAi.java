@@ -1,10 +1,11 @@
 package com.roguelike.dungeon.game.battle;
 
 /**
- * 默认怪物 AI：攻击与叠甲交替循环（保留 MVP 原有行为）。
+ * 可配置的通用怪物：攻击与叠甲交替循环（保留 MVP 原有行为）。
  *
- * <p>也作为可配置的通用怪物使用——按名字、血量、攻击、叠甲构造，
- * 可复现「先攻击、再叠甲」的简单节奏。</p>
+ * <p>按名字、血量、攻击、叠甲构造，可复现「先攻击、再叠甲」的简单节奏；
+ * 也作为卡牌效果测试里的「木桩」使用（attack/block 传 0）。
+ * 与 {@link MonsterAiService} 不同，本实现的「下一动是否攻击」状态存在内部。</p>
  */
 public final class DefaultMonsterAi implements MonsterAi {
 
@@ -40,10 +41,23 @@ public final class DefaultMonsterAi implements MonsterAi {
     }
 
     @Override
-    public Combat.Intent nextIntent() {
+    public String intentText(BattleState state) {
+        if (state.isFinished()) {
+            return "已倒下";
+        }
         return willAttack
-                ? new Combat.Intent("ATTACK", attack)
-                : new Combat.Intent("DEFEND", block);
+                ? "下回合：攻击 " + attack
+                : "下回合：防御 +" + block;
+    }
+
+    @Override
+    public IntentSnapshot intentInfo(BattleState state) {
+        if (state.isFinished()) {
+            return null;
+        }
+        return willAttack
+                ? new IntentSnapshot("ATTACK", attack)
+                : new IntentSnapshot("DEFEND", block);
     }
 
     @Override
@@ -52,14 +66,16 @@ public final class DefaultMonsterAi implements MonsterAi {
     }
 
     @Override
-    public void takeTurn(Combat combat, int turnNumber) {
+    public MonsterTurnResult takeTurn(BattleState state) {
+        state.setPlayerTurn(false);
+        state.setMonsterBlock(0);
         if (willAttack) {
-            int dealt = combat.applyDamage(false, attack);
-            combat.log(name() + "攻击，对玩家造成 " + dealt + " 点伤害。");
-        } else {
-            combat.addMonsterBlockInternal(block);
-            combat.log(name() + "防御，获得 " + block + " 点护盾。");
+            int dealt = state.applyDamage(false, attack);
+            willAttack = false;
+            return MonsterTurnResult.attack(dealt);
         }
-        willAttack = !willAttack;
+        state.addMonsterBlock(block);
+        willAttack = true;
+        return MonsterTurnResult.defend(block);
     }
 }

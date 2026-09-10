@@ -21,8 +21,19 @@ public final class CultistAi implements MonsterAi {
     }
 
     @Override
-    public Combat.Intent nextIntent() {
-        return new Combat.Intent("ATTACK", attackDamage);
+    public String intentText(BattleState state) {
+        if (state.isFinished()) {
+            return "已倒下";
+        }
+        return "下回合：攻击 " + attackDamage;
+    }
+
+    @Override
+    public IntentSnapshot intentInfo(BattleState state) {
+        if (state.isFinished()) {
+            return null;
+        }
+        return new IntentSnapshot("ATTACK", attackDamage);
     }
 
     @Override
@@ -31,9 +42,11 @@ public final class CultistAi implements MonsterAi {
     }
 
     @Override
-    public void takeTurn(Combat combat, int turnNumber) {
-        int dealt = combat.applyDamage(false, attackDamage);
-        combat.log("邪教徒攻击，对玩家造成 " + dealt + " 点伤害。");
+    public MonsterTurnResult takeTurn(BattleState state) {
+        state.setPlayerTurn(false);
+        state.setMonsterBlock(0);
+        int dealt = state.applyDamage(false, attackDamage);
         attackDamage += RITUAL_GAIN;
+        return MonsterTurnResult.attack(dealt);
     }
 }

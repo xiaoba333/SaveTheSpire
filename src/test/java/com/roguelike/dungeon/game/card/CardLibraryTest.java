@@ -10,14 +10,15 @@ import org.junit.jupiter.api.Test;
 class CardLibraryTest {
 
     @Test
-    void startingDeckHasTenBasicCards() {
+    void startingDeckHasTenBasicCardsAndForge() {
         List<Card> deck = CardLibrary.startingDeck();
 
-        assertEquals(10, deck.size());
+        assertEquals(11, deck.size());
         assertEquals(5, deck.stream().filter(card -> card.type() == CardType.ATTACK).count());
-        assertEquals(5, deck.stream().filter(card -> card.type() == CardType.SKILL).count());
+        assertEquals(6, deck.stream().filter(card -> card.type() == CardType.SKILL).count());
         assertTrue(deck.stream().allMatch(card -> card.cost() == 1));
         assertFalse(deck.stream().anyMatch(Card::exhausts));
+        assertTrue(deck.contains(CardLibrary.FORGE));
     }
 
     @Test

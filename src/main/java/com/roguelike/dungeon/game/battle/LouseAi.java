@@ -21,10 +21,23 @@ public final class LouseAi implements MonsterAi {
     }
 
     @Override
-    public Combat.Intent nextIntent() {
+    public String intentText(BattleState state) {
+        if (state.isFinished()) {
+            return "已倒下";
+        }
         return step % 2 == 0
-                ? new Combat.Intent("DEFEND", CURL_BLOCK)
-                : new Combat.Intent("ATTACK", BITE);
+                ? "下回合：防御 +" + CURL_BLOCK
+                : "下回合：攻击 " + BITE;
+    }
+
+    @Override
+    public IntentSnapshot intentInfo(BattleState state) {
+        if (state.isFinished()) {
+            return null;
+        }
+        return step % 2 == 0
+                ? new IntentSnapshot("DEFEND", CURL_BLOCK)
+                : new IntentSnapshot("ATTACK", BITE);
     }
 
     @Override
@@ -33,14 +46,16 @@ public final class LouseAi implements MonsterAi {
     }
 
     @Override
-    public void takeTurn(Combat combat, int turnNumber) {
+    public MonsterTurnResult takeTurn(BattleState state) {
+        state.setPlayerTurn(false);
+        state.setMonsterBlock(0);
         if (step % 2 == 0) {
-            combat.addMonsterBlockInternal(CURL_BLOCK);
-            combat.log("虱虫蜷缩，获得 " + CURL_BLOCK + " 点护盾。");
-        } else {
-            int dealt = combat.applyDamage(false, BITE);
-            combat.log("虱虫撕咬，对玩家造成 " + dealt + " 点伤害。");
+            state.addMonsterBlock(CURL_BLOCK);
+            step++;
+            return MonsterTurnResult.defend(CURL_BLOCK);
         }
+        int dealt = state.applyDamage(false, BITE);
         step++;
+        return MonsterTurnResult.attack(dealt);
     }
 }
