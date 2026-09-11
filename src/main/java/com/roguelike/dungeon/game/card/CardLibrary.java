@@ -3,8 +3,10 @@ package com.roguelike.dungeon.game.card;
 import com.roguelike.dungeon.game.entity.MetallicizePower;
 import com.roguelike.dungeon.game.entity.StatusEffect;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 当前版本卡牌定义与起始牌组。
@@ -505,13 +507,64 @@ public final class CardLibrary {
     private CardLibrary() {
     }
 
-    /** 创建血之领主初始牌组：4 打击、4 防御、1 狂宴、1 御血术。 */
+    /** 公共无色牌，所有角色的奖励/商店卡池都会并入。 */
+    public static List<Card> colorlessRewardCards() {
+        return List.of(FORGE);
+    }
+
+    /** 铁血战士专属奖励卡池（不含基础打击/防御，也不含公共无色牌）。 */
+    public static List<Card> warriorRewardCards() {
+        return List.of(BASH, QUICK_SLASH, HEAVY_STRIKE, IRON_WAVE, SHRUG_IT_OFF);
+    }
+
+    public static List<String> warriorRewardCardIds() {
+        return ids(warriorRewardCards());
+    }
+
+    /**
+     * 血之领主专属奖励卡池。
+     *
+     * <p>保留 {@link #FEAST} 和 {@link #BLOOD_DEVOTION_STRIKE}；
+     * 不收录重复的 {@link #BLOOD_FEAST}、{@link #SACRIFICE_STRIKE}，
+     * 也不收录效果尚未实现的牌。</p>
+     */
+    public static List<Card> bloodLordRewardCards() {
+        return List.of(
+                BLOODLETTING,
+                BLOOD_BURST,
+                BLOOD_LORD,
+                BLOOD_SACRIFICE,
+                BLOOD_TRANSFUSION,
+                FEAST,
+                BLOOD_DEVOTION_STRIKE,
+                BLOOD_LACERATION,
+                CRIMSON_POOL,
+                BLOOD_STRIP,
+                VOMIT_BLOOD,
+                BLOOD_REBIRTH,
+                BLOOD_METALLICIZE);
+    }
+
+    public static List<String> bloodLordRewardCardIds() {
+        return ids(bloodLordRewardCards());
+    }
+
+    /** 角色专属卡池再加上公共无色牌，供战斗奖励和商店使用。 */
+    public static List<Card> rewardPoolFor(List<String> characterRewardCardIds) {
+        LinkedHashSet<Card> cards = new LinkedHashSet<>();
+        for (String cardId : Objects.requireNonNull(characterRewardCardIds, "奖励卡池不能为 null")) {
+            cards.add(byId(cardId));
+        }
+        cards.addAll(colorlessRewardCards());
+        return List.copyOf(cards);
+    }
+
+    /** 创建铁血战士初始牌组：4 打击、4 防御、1 痛击。 */
     public static List<Card> startingDeck() {
         return List.of(
                 STRIKE, STRIKE, STRIKE, STRIKE,
                 DEFEND, DEFEND, DEFEND, DEFEND,
-                FEAST,
-                SACRIFICE_STRIKE);
+                BASH);
     }
 
     /** 按 id 查询卡牌定义。 */
@@ -521,5 +574,9 @@ public final class CardLibrary {
             throw new IllegalArgumentException("未知卡牌 id：" + id);
         }
         return card;
+    }
+
+    private static List<String> ids(List<Card> cards) {
+        return cards.stream().map(Card::id).toList();
     }
 }

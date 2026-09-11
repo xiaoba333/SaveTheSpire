@@ -1,17 +1,41 @@
 package com.roguelike.dungeon.game.character;
 
 import com.roguelike.dungeon.game.card.CardLibrary;
+import com.roguelike.dungeon.game.entity.RelicLibrary;
 
 import java.util.List;
 
 /**
- * 当前版本的角色目录实现，提供「血祭者」角色。
+ * 当前版本的角色目录实现，提供「铁血战士」和「血祭者」。
  */
 public final class GameCharacterCatalog implements CharacterCatalog {
 
     /**
-     * 「血祭者」：初始血量 10，起始遗物「血之代价」（遗物属于后续扩展，见契约第 10 节）。
-     * 起始牌组：4 攻击 + 4 防御 + 御血术 + 狂宴（共 10 张）。
+     * 「铁血战士」：4 打击 + 4 防御 + 1 痛击。
+     * 初始遗物「燃烧之血」：战斗结束时回复 6 点生命。
+     */
+    public static final CharacterDefinition WARRIOR_CHARACTER = new CharacterDefinition(
+            "warrior",
+            "铁血战士",
+            "以打击和护甲见长的战士，战斗结束后回复生命。",
+            50,
+            3,
+            0,
+            List.of(
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.BASH.id()),
+            CardLibrary.warriorRewardCardIds(),
+            RelicLibrary.BURNING_BLOOD);
+
+    /**
+     * 「血祭者」：初始血量 10，起始牌组 4 攻击 + 4 防御 + 御血术 + 狂宴。
      */
     public static final CharacterDefinition BLOOD_PRICE_CHARACTER = new CharacterDefinition(
             "blood",
@@ -30,11 +54,13 @@ public final class GameCharacterCatalog implements CharacterCatalog {
                     CardLibrary.BLOOD_DEFEND.id(),
                     CardLibrary.BLOOD_DEFEND.id(),
                     CardLibrary.BLOOD_DEVOTION_STRIKE.id(),
-                    CardLibrary.BLOOD_FEAST.id()));
+                    CardLibrary.FEAST.id()),
+            CardLibrary.bloodLordRewardCardIds(),
+            "");
 
     /**
      * 测试用隐藏角色：不出现在可选列表，选角时输入 {@code god} 解锁。
-     * 起始牌组只有一张「降神」。
+     * 起始牌组只有一张「降神」，初始金币 999。
      */
     public static final CharacterDefinition GOD_CHARACTER = new CharacterDefinition(
             "god",
@@ -42,11 +68,13 @@ public final class GameCharacterCatalog implements CharacterCatalog {
             "测试角色，牌组只有一张降神。",
             50,
             3,
-            0,
-            List.of(CardLibrary.DESCEND.id()));
+            999,
+            List.of(CardLibrary.DESCEND.id()),
+            List.of(),
+            "");
 
     private static final List<CharacterDefinition> CHARACTERS =
-            List.of(BLOOD_PRICE_CHARACTER);
+            List.of(WARRIOR_CHARACTER, BLOOD_PRICE_CHARACTER);
 
     @Override
     public List<CharacterDefinition> getAvailableCharacters() {

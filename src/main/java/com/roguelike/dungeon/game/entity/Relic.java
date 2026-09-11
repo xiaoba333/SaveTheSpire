@@ -20,4 +20,12 @@ public interface Relic {
      */
     default void onEnterLevel(Player player) {
     }
+
+    /**
+     * 战斗胜利结束时触发。默认空实现，具体遗物按需覆写。
+     *
+     * @param player 本局唯一的玩家实体，遗物直接在其上修改状态
+     */
+    default void onBattleEnd(Player player) {
+    }
 }

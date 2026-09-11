@@ -73,7 +73,7 @@ public final class CombatFactory {
                 player, battleDeck, logger, finishHandler, cardUpgradeHandler, monsterAi);
     }
 
-    /** 起始牌组：5 打击 + 5 防御，每张独立实例 id。 */
+    /** 起始牌组：4 打击 + 4 防御 + 1 痛击，每张独立实例 id。 */
     public static List<CardInstance> defaultDeck() {
         return CardLibrary.startingDeck().stream()
                 .map(card -> new CardInstance(UUID.randomUUID().toString(), card))

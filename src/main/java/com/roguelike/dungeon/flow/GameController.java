@@ -112,6 +112,8 @@ public final class GameController implements LevelFinishHandler {
     /** 当前篝火可以选择锻造的永久牌组卡牌。 */
     public List<CardInstance> getCampfireUpgradeableCards() {
         return currentCampfire == null ? List.of() : currentCampfire.getUpgradeableCards();
+    }
+
     /** 当前商店尚未售出的卡牌商品。 */
     public List<ShopItem> getCurrentShopItems() {
         return currentShop == null ? List.of() : currentShop.getAvailableItems();
@@ -135,9 +137,9 @@ public final class GameController implements LevelFinishHandler {
 
         switch (node.type()) {
             case BATTLE, ELITE, BOSS -> startBattle();
-case EVENT -> startEvent(node);
-case SHOP -> startShop(node);
-case REST -> startCampfire();
+            case EVENT -> startEvent(node);
+            case SHOP -> startShop(node);
+            case REST -> startCampfire();
         }
         return node;
     }
@@ -193,6 +195,8 @@ case REST -> startCampfire();
     public CampfireActionResult leaveCampfire() {
         requirePhase(GamePhase.REST);
         return currentCampfire.leave();
+    }
+
     /** 在当前商店购买卡牌。 */
     public ShopActionResult buyShopItem(String itemId) {
         requirePhase(GamePhase.SHOP);
@@ -262,6 +266,8 @@ case REST -> startCampfire();
             return;
         }
 
+        runState.getPlayer().onBattleEnd();
+
         MapNode node = requireCurrentNode();
         if (node.type() == MapNodeType.BOSS) {
             currentCombat = null;
@@ -320,13 +326,13 @@ case REST -> startCampfire();
         return seed * 31 + node.id();
     }
 
-private long eventSeed(MapNode node) {
-    return rewardSeed(node) ^ 0xC64A7935BD1E995L;
-}
+    private long eventSeed(MapNode node) {
+        return rewardSeed(node) ^ 0xC64A7935BD1E995L;
+    }
 
-private long shopSeed(MapNode node) {
-    return rewardSeed(node) ^ 0x5DEECE66DL;
-}
+    private long shopSeed(MapNode node) {
+        return rewardSeed(node) ^ 0x5DEECE66DL;
+    }
 
     private void requirePhase(GamePhase expected) {
         if (phase != expected) {
