@@ -15,7 +15,8 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
     private int health;
     private int armor;
 
-    private final int maxEnergy;
+    /** 每回合能量上限。可被遗物永久提升，因此不是 final。 */
+    private int maxEnergy;
     private int energy;
 
     private final Map<StatusEffect, Integer> statuses = new EnumMap<>(StatusEffect.class);
@@ -118,6 +119,22 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         return maxEnergy;
     }
 
+    /**
+     * 提升每回合能量上限（永久，直到本局结束）。
+     *
+     * <p>提升后当回合立刻受益：当前能量同步加满到新上限，
+     * 否则在回合开始阶段提升上限会看不到效果。</p>
+     *
+     * @param amount 提升量，amount &lt;= 0 时忽略
+     */
+    public void addMaxEnergy(int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        maxEnergy += amount;
+        energy = Math.min(energy + amount, maxEnergy);
+    }
+
     @Override
     public void setEnergy(int energy) {
         this.energy = clamp(energy, 0, maxEnergy);
@@ -211,6 +228,14 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
     /** 是否持有某遗物（按实例比较）。 */
     public boolean hasRelic(Relic relic) {
         return relics.contains(relic);
+    }
+
+    /** 是否持有指定编号的遗物（按 id 比较），用于防止重复获取。 */
+    public boolean hasRelicById(String relicId) {
+        if (relicId == null || relicId.isBlank()) {
+            return false;
+        }
+        return relics.stream().anyMatch(relic -> relicId.equals(relic.id()));
     }
 
     /** 当前持有的全部遗物。 */

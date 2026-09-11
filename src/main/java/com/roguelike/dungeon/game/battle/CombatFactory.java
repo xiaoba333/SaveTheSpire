@@ -4,6 +4,7 @@ import com.roguelike.dungeon.flow.LevelFinishHandler;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.relic.RelicService;
 
 import java.util.List;
 import java.util.UUID;
@@ -69,8 +70,29 @@ public final class CombatFactory {
             LevelFinishHandler finishHandler,
             Consumer<CardInstance> cardUpgradeHandler,
             MonsterAi monsterAi) {
+        return createForNode(
+                player, battleDeck, logger, finishHandler,
+                cardUpgradeHandler, monsterAi, null);
+    }
+
+    /**
+     * 同上，并接入本局的遗物分发器。
+     *
+     * <p>传入 {@code relicService} 后，战斗会在各触发点自动结算玩家持有的遗物。</p>
+     *
+     * @param relicService 本局共享的遗物分发器；传 null 表示本场不结算遗物
+     */
+    public static Combat createForNode(
+            Player player,
+            List<CardInstance> battleDeck,
+            Consumer<String> logger,
+            LevelFinishHandler finishHandler,
+            Consumer<CardInstance> cardUpgradeHandler,
+            MonsterAi monsterAi,
+            RelicService relicService) {
         return new Combat(
-                player, battleDeck, logger, finishHandler, cardUpgradeHandler, monsterAi);
+                player, battleDeck, logger, finishHandler,
+                cardUpgradeHandler, monsterAi, relicService);
     }
 
     /** 起始牌组：5 打击 + 5 防御，每张独立实例 id。 */
