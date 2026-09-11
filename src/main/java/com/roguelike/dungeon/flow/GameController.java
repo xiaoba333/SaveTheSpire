@@ -21,6 +21,9 @@ import com.roguelike.dungeon.game.map.MapService;
 import com.roguelike.dungeon.game.reward.BattleReward;
 import com.roguelike.dungeon.game.reward.RewardService;
 import com.roguelike.dungeon.game.run.RunState;
+import com.roguelike.dungeon.game.shop.ShopActionResult;
+import com.roguelike.dungeon.game.shop.ShopItem;
+import com.roguelike.dungeon.game.shop.ShopService;
 
 import java.util.List;
 import java.util.Objects;
@@ -46,6 +49,7 @@ public final class GameController implements LevelFinishHandler {
     private RewardService currentReward;
     private EventService currentEvent;
     private CampfireService currentCampfire;
+    private ShopService currentShop;
 
     public GameController(
             RunState runState,
@@ -108,6 +112,18 @@ public final class GameController implements LevelFinishHandler {
     /** 当前篝火可以选择锻造的永久牌组卡牌。 */
     public List<CardInstance> getCampfireUpgradeableCards() {
         return currentCampfire == null ? List.of() : currentCampfire.getUpgradeableCards();
+    /** 当前商店尚未售出的卡牌商品。 */
+    public List<ShopItem> getCurrentShopItems() {
+        return currentShop == null ? List.of() : currentShop.getAvailableItems();
+    }
+
+    /** 当前商店可以选择删除的永久牌组。 */
+    public List<CardInstance> getShopRemovableCards() {
+        return currentShop == null ? List.of() : currentShop.getRemovableCards();
+    }
+
+    public boolean isShopCardRemovalUsed() {
+        return currentShop != null && currentShop.isCardRemovalUsed();
     }
 
     /**
@@ -119,9 +135,9 @@ public final class GameController implements LevelFinishHandler {
 
         switch (node.type()) {
             case BATTLE, ELITE, BOSS -> startBattle();
-            case EVENT -> startEvent(node);
-            case SHOP -> phase = GamePhase.SHOP;
-            case REST -> startCampfire();
+case EVENT -> startEvent(node);
+case SHOP -> startShop(node);
+case REST -> startCampfire();
         }
         return node;
     }
@@ -177,6 +193,22 @@ public final class GameController implements LevelFinishHandler {
     public CampfireActionResult leaveCampfire() {
         requirePhase(GamePhase.REST);
         return currentCampfire.leave();
+    /** 在当前商店购买卡牌。 */
+    public ShopActionResult buyShopItem(String itemId) {
+        requirePhase(GamePhase.SHOP);
+        return currentShop.buy(itemId);
+    }
+
+    /** 在当前商店删除一张永久牌组中的卡牌。 */
+    public ShopActionResult removeCardAtShop(String cardInstanceId) {
+        requirePhase(GamePhase.SHOP);
+        return currentShop.removeCard(cardInstanceId);
+    }
+
+    /** 离开当前商店，完成并解锁地图节点。 */
+    public void leaveShop() {
+        requirePhase(GamePhase.SHOP);
+        currentShop.leave();
     }
 
     private void startBattle() {
@@ -213,6 +245,15 @@ public final class GameController implements LevelFinishHandler {
             default -> throw new IllegalStateException(
                     "非战斗节点无法选取怪物: " + node.type());
         };
+    }
+
+    private void startShop(MapNode node) {
+        phase = GamePhase.SHOP;
+        currentShop = new ShopService(
+                runState,
+                rewardPool,
+                shopSeed(node),
+                this);
     }
 
     private void finishBattle(LevelResult result) {
@@ -253,6 +294,7 @@ public final class GameController implements LevelFinishHandler {
     private void finishNonBattleLevel(LevelResult result) {
         currentEvent = null;
         currentCampfire = null;
+        currentShop = null;
         if (result == LevelResult.DEFEATED) {
             phase = GamePhase.DEFEAT;
             return;
@@ -278,9 +320,13 @@ public final class GameController implements LevelFinishHandler {
         return seed * 31 + node.id();
     }
 
-    private long eventSeed(MapNode node) {
-        return rewardSeed(node) ^ 0xC6A4A7935BD1E995L;
-    }
+private long eventSeed(MapNode node) {
+    return rewardSeed(node) ^ 0xC64A7935BD1E995L;
+}
+
+private long shopSeed(MapNode node) {
+    return rewardSeed(node) ^ 0x5DEECE66DL;
+}
 
     private void requirePhase(GamePhase expected) {
         if (phase != expected) {

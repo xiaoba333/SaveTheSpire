@@ -12,6 +12,9 @@ import com.roguelike.dungeon.game.event.EventChoice;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
 import com.roguelike.dungeon.game.run.RunState;
+import com.roguelike.dungeon.game.shop.ShopActionResult;
+import com.roguelike.dungeon.game.shop.ShopItem;
+import com.roguelike.dungeon.game.shop.ShopService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -213,6 +216,56 @@ class GameControllerTest {
         assertEquals(GamePhase.VICTORY, controller.getPhase());
         assertFalse(runState.hasNextAct());
         assertTrue(controller.getCurrentNode().isEmpty());
+    }
+
+    @Test
+    void shopShouldSupportBuyingRemovingCardAndLeavingToMap() {
+        RunState runState = new RunState(
+                new Player(50, 3),
+                List.of(new CardInstance("strike-1", CardLibrary.STRIKE)),
+                200,
+                12345L,
+                1);
+        GameController controller = new GameController(runState, REWARD_POOL, line -> { });
+
+        int safetyCounter = 0;
+        while (controller.getPhase() != GamePhase.SHOP && safetyCounter++ < 10) {
+            if (controller.getPhase() == GamePhase.MAP) {
+                MapNode node = controller.getMapService().getAvailableNodes().getFirst();
+                controller.selectNode(node.id());
+            }
+            if (controller.getPhase() == GamePhase.BATTLE) {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+                controller.skipRewardCard();
+            } else if (controller.getPhase() == GamePhase.EVENT
+                    || controller.getPhase() == GamePhase.REST) {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+            }
+        }
+
+        assertEquals(GamePhase.SHOP, controller.getPhase());
+        int shopNodeId = controller.getCurrentNode().orElseThrow().id();
+        int goldBefore = runState.getGold();
+        int deckSizeBefore = runState.getDeck().size();
+        ShopItem item = controller.getCurrentShopItems().getFirst();
+
+        assertEquals(ShopActionResult.SUCCESS, controller.buyShopItem(item.id()));
+        assertEquals(goldBefore - item.price(), runState.getGold());
+        assertEquals(deckSizeBefore + 1, runState.getDeck().size());
+
+        String originalCardId = "strike-1";
+        assertEquals(ShopActionResult.SUCCESS,
+                controller.removeCardAtShop(originalCardId));
+        assertEquals(goldBefore - item.price() - ShopService.CARD_REMOVAL_PRICE,
+                runState.getGold());
+        assertFalse(runState.getDeck().stream()
+                .anyMatch(card -> card.id().equals(originalCardId)));
+
+        controller.leaveShop();
+
+        assertEquals(GamePhase.MAP, controller.getPhase());
+        assertTrue(controller.getMapService().getCompletedNodeIds().contains(shopNodeId));
+        assertTrue(controller.getCurrentShopItems().isEmpty());
     }
 
     private static void completeOneNode(GameController controller) {
