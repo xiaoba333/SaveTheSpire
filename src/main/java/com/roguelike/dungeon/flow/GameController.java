@@ -112,6 +112,8 @@ public final class GameController implements LevelFinishHandler {
     /** 当前篝火可以选择锻造的永久牌组卡牌。 */
     public List<CardInstance> getCampfireUpgradeableCards() {
         return currentCampfire == null ? List.of() : currentCampfire.getUpgradeableCards();
+    }
+
     /** 当前商店尚未售出的卡牌商品。 */
     public List<ShopItem> getCurrentShopItems() {
         return currentShop == null ? List.of() : currentShop.getAvailableItems();
@@ -193,6 +195,8 @@ case REST -> startCampfire();
     public CampfireActionResult leaveCampfire() {
         requirePhase(GamePhase.REST);
         return currentCampfire.leave();
+    }
+
     /** 在当前商店购买卡牌。 */
     public ShopActionResult buyShopItem(String itemId) {
         requirePhase(GamePhase.SHOP);
