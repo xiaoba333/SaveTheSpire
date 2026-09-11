@@ -57,6 +57,15 @@ public interface CardEffectContext {
     /** 给玩家叠加指定状态的层数。 */
     void applyStatusToPlayer(StatusEffect effect, int amount);
 
+    /** 对所有敌人造成伤害。当前单敌人模型下等价于攻击当前敌人。 */
+    void dealDamageToAllMonsters(int amount);
+
+    /** 给所有敌人叠加指定状态。当前单敌人模型下等价于给当前敌人叠加。 */
+    void applyStatusToAllMonsters(StatusEffect effect, int amount);
+
+    /** 当前 X 费用卡牌消耗的能量数。非 X 费用卡牌返回 0。 */
+    int getXCost();
+
     /**
      * 升级当前卡牌效果指定的目标手牌。
      *

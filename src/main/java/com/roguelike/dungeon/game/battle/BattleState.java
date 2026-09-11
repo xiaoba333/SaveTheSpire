@@ -354,5 +354,17 @@ public final class BattleState implements BattleInfo {
     public int getMonsterStatusStacks(StatusEffect effect) {
         return monsterStatuses.getOrDefault(effect, 0);
     }
+
+    /** 怪物回合结束状态结算：中毒扣血，易伤、虚弱、血池各减少 1 层。 */
+    public void tickMonsterStatuses() {
+        int poison = getMonsterStatusStacks(StatusEffect.POISON);
+        if (poison > 0) {
+            monsterHp = Math.max(0, monsterHp - poison);
+            addMonsterStatus(StatusEffect.POISON, -1);
+        }
+        addMonsterStatus(StatusEffect.VULNERABLE, -1);
+        addMonsterStatus(StatusEffect.WEAK, -1);
+        addMonsterStatus(StatusEffect.BLOOD_POOL, -1);
+    }
 }
 

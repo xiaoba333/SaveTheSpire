@@ -2,6 +2,7 @@ package com.roguelike.dungeon.game.battle;
 
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
+import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.entity.RelicTrigger;
@@ -101,10 +102,21 @@ public final class CardPlayService {
             return PlayCardResult.CARD_NOT_PLAYABLE;
         }
 
-        // 费用先由遗物修正，再校验能量。
-        int actualCost = relicService == null
-                ? instance.effectiveCost()
-                : relicService.modifyCost(instance);
+        // 费用先由遗物修正，再校验能量。X 费用牌直接消耗当前全部能量。
+        int xCost = 0;
+        int actualCost;
+        if (card.id().equals(CardLibrary.BLOOD_RAIN.id())) {
+            actualCost = player.getEnergy();
+            if (actualCost <= 0) {
+                logger.accept("能量不足，无法打出「" + instance.displayName() + "」。");
+                return PlayCardResult.NOT_ENOUGH_ENERGY;
+            }
+            xCost = actualCost;
+        } else {
+            actualCost = relicService == null
+                    ? instance.effectiveCost()
+                    : relicService.modifyCost(instance);
+        }
         if (!tryConsumeEnergy(player, actualCost)) {
             logger.accept("能量不足，无法打出「" + instance.displayName() + "」。");
             return PlayCardResult.NOT_ENOUGH_ENERGY;
@@ -117,7 +129,8 @@ public final class CardPlayService {
                 logger,
                 cardUpgradeHandler,
                 targetCardId,
-                instance.upgraded()));
+                instance.upgraded(),
+                xCost));
 
         // 先累计出牌计数再分发遗物：苦无 / 手里剑需要看到「这是本场第几张攻击牌」。
         state.onCardPlayed(card.type());

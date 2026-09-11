@@ -25,6 +25,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
     private final Consumer<CardInstance> cardUpgradeHandler;
     private final String targetCardId;
     private final boolean upgraded;
+    private final int xCost;
 
     /**
      * @param state 当前战斗状态
@@ -32,13 +33,15 @@ public final class CombatCardEffectContext implements CardEffectContext {
      * @param cardUpgradeHandler 手牌升级后同步永久牌组
      * @param targetCardId 锻造牌要升级的目标手牌实例 id；非锻造牌为 null
      * @param upgraded 当前打出的牌实例是否已经升级
+     * @param xCost X 费用卡牌消耗的能量；非 X 费用卡牌为 0
      */
     public CombatCardEffectContext(
             BattleState state,
             Consumer<String> logger,
             Consumer<CardInstance> cardUpgradeHandler,
             String targetCardId,
-            boolean upgraded) {
+            boolean upgraded,
+            int xCost) {
         this.state = Objects.requireNonNull(state, "战斗状态不能为 null");
         this.player = state.getPlayer();
         this.piles = state.getPiles();
@@ -47,6 +50,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
                 cardUpgradeHandler, "卡牌升级处理器不能为 null");
         this.targetCardId = targetCardId;
         this.upgraded = upgraded;
+        this.xCost = xCost;
     }
 
     @Override
@@ -141,6 +145,21 @@ public final class CombatCardEffectContext implements CardEffectContext {
     @Override
     public void applyStatusToPlayer(StatusEffect effect, int amount) {
         player.addStacks(effect, amount);
+    }
+
+    @Override
+    public void dealDamageToAllMonsters(int amount) {
+        dealDamageToMonster(amount);
+    }
+
+    @Override
+    public void applyStatusToAllMonsters(StatusEffect effect, int amount) {
+        applyStatusToMonster(effect, amount);
+    }
+
+    @Override
+    public int getXCost() {
+        return xCost;
     }
 
     @Override
