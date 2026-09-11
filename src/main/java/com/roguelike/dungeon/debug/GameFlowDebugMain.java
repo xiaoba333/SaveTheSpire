@@ -3,12 +3,20 @@ package com.roguelike.dungeon.debug;
 import com.roguelike.dungeon.flow.GameController;
 import com.roguelike.dungeon.flow.GamePhase;
 import com.roguelike.dungeon.flow.LevelResult;
+import com.roguelike.dungeon.flow.MenuController;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
-import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.campfire.CampfireAction;
+import com.roguelike.dungeon.game.campfire.CampfireActionResult;
+import com.roguelike.dungeon.game.campfire.CampfireActionStatus;
+import com.roguelike.dungeon.game.character.CharacterDefinition;
+import com.roguelike.dungeon.game.character.GameCharacterCatalog;
+import com.roguelike.dungeon.game.event.EventChoice;
+import com.roguelike.dungeon.game.event.EventChoiceResult;
+import com.roguelike.dungeon.game.event.GameEvent;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapTextRenderer;
 import com.roguelike.dungeon.game.reward.BattleReward;
@@ -21,7 +29,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.IntStream;
 
 /**
  * 可在 IntelliJ 控制台中运行的纯文字游戏流程。
@@ -37,7 +44,13 @@ public final class GameFlowDebugMain {
             CardLibrary.HEAVY_STRIKE,
             CardLibrary.IRON_WAVE,
             CardLibrary.SHRUG_IT_OFF,
-            CardLibrary.BLOODLETTING);
+            CardLibrary.BLOODLETTING,
+            CardLibrary.BLOOD_BURST,
+            CardLibrary.BLOOD_LORD,
+            CardLibrary.BLOOD_SACRIFICE,
+            CardLibrary.BLOOD_TRANSFUSION,
+            CardLibrary.FEAST,
+            CardLibrary.SACRIFICE_STRIKE);
 
     private final Scanner scanner;
     private final GameController controller;
@@ -53,28 +66,63 @@ public final class GameFlowDebugMain {
         try {
             long seed = readSeed(args);
             int actCount = readActCount(args);
-            RunState runState = new RunState(
-                    new Player(Combat.PLAYER_MAX_HP, Combat.PLAYER_MAX_ENERGY),
-                    createStartingDeck(),
-                    0,
-                    seed,
-                    actCount);
-            GameController controller = new GameController(
-                    runState,
-                    REWARD_POOL,
-                    line -> System.out.println("[战斗] " + line));
 
             System.out.println("=== 杀戮尖塔文字流程 MVP ===");
             System.out.println("地图种子：" + seed);
             System.out.println("章节数量：" + actCount);
             System.out.println("任何阶段输入 quit 可以退出。\n");
 
+            MenuController menu = new MenuController(new GameCharacterCatalog());
+            menu.beginCharacterSelect();
+
             try (Scanner scanner = new Scanner(System.in, StandardCharsets.UTF_8)) {
+                CharacterDefinition character = chooseCharacter(scanner, menu);
+                if (character == null) {
+                    return;
+                }
+                RunState runState = menu.createRun(character.id(), seed, actCount);
+                System.out.println("已选择角色「" + character.name()
+                        + "」，最大生命 " + character.maxHealth() + "。\n");
+
+                GameController controller = new GameController(
+                        runState,
+                        REWARD_POOL,
+                        line -> System.out.println("[战斗] " + line));
                 new GameFlowDebugMain(scanner, controller).run();
             }
         } catch (IllegalArgumentException exception) {
             System.out.println(exception.getMessage());
             printUsage();
+        }
+    }
+
+    /** 让玩家从可选角色里选一个；输入 quit 返回 null。 */
+    private static CharacterDefinition chooseCharacter(
+            Scanner scanner, MenuController menu) {
+        printCharacterChoices(menu.getAvailableCharacters());
+        while (true) {
+            System.out.print("请输入角色编号（或 quit 退出）：");
+            if (!scanner.hasNextLine()) {
+                return null;
+            }
+            String input = scanner.nextLine().trim();
+            if (input.equalsIgnoreCase("quit")) {
+                System.out.println("已退出。");
+                return null;
+            }
+            try {
+                return menu.selectCharacter(input);
+            } catch (IllegalArgumentException exception) {
+                System.out.println("无法选择角色：" + exception.getMessage());
+            }
+        }
+    }
+
+    private static void printCharacterChoices(List<CharacterDefinition> characters) {
+        System.out.println("可选角色：");
+        for (CharacterDefinition character : characters) {
+            System.out.println("  " + character.id() + " - " + character.name()
+                    + "（HP " + character.maxHealth() + "）| " + character.description());
         }
     }
 
@@ -84,8 +132,12 @@ public final class GameFlowDebugMain {
                 case MAP -> handleMap();
                 case BATTLE -> handleBattle();
                 case REWARD -> handleReward();
+
+                case EVENT -> handleEvent();
+                case REST -> handleCampfire();
+               
                 case SHOP -> handleShop();
-                case EVENT, REST -> handlePlaceholderLevel();
+            
                 case VICTORY -> {
                     printRunSummary("恭喜通关！");
                     running = false;
@@ -186,6 +238,115 @@ public final class GameFlowDebugMain {
             System.out.println("请输入奖励编号或 skip。");
         } catch (IllegalArgumentException | IllegalStateException exception) {
             System.out.println("无法领取奖励：" + exception.getMessage());
+        }
+    }
+
+    private void handleEvent() {
+        while (running && controller.getPhase() == GamePhase.EVENT) {
+            GameEvent event = controller.getCurrentEvent().orElseThrow();
+            List<EventChoice> choices = controller.getCurrentEventChoices();
+            System.out.println("\n=== " + event.title() + " ===");
+            System.out.println(event.description());
+            for (int i = 0; i < choices.size(); i++) {
+                EventChoice choice = choices.get(i);
+                System.out.println("  " + i + " - " + choice.label()
+                        + " | " + choice.description()
+                        + (choice.available()
+                        ? ""
+                        : "（不可选：" + choice.unavailableReason() + "）"));
+            }
+
+            String input = readLine("请输入事件选项编号：");
+            if (!running) {
+                return;
+            }
+            try {
+                int index = Integer.parseInt(input);
+                if (index < 0 || index >= choices.size()) {
+                    System.out.println("事件选项编号超出范围。");
+                    continue;
+                }
+                EventChoiceResult result = controller.chooseEventChoice(
+                        choices.get(index).id());
+                System.out.println(result.message());
+            } catch (NumberFormatException exception) {
+                System.out.println("请输入整数事件选项编号。");
+            }
+        }
+    }
+
+    private void handleCampfire() {
+        while (running && controller.getPhase() == GamePhase.REST) {
+            RunState state = controller.getRunState();
+            List<CampfireAction> actions = controller.getCurrentCampfireActions();
+            System.out.println("\n=== 篝火 ===");
+            System.out.println("当前生命：" + state.getPlayer().getHealth()
+                    + " / " + state.getPlayer().getMaxHealth());
+            for (int i = 0; i < actions.size(); i++) {
+                CampfireAction action = actions.get(i);
+                System.out.println("  " + i + " - " + action.label()
+                        + " | " + action.description()
+                        + (action.available()
+                        ? ""
+                        : "（不可选：" + action.unavailableReason() + "）"));
+            }
+
+            String input = readLine("请输入篝火操作编号：");
+            if (!running) {
+                return;
+            }
+            try {
+                int index = Integer.parseInt(input);
+                if (index < 0 || index >= actions.size()) {
+                    System.out.println("篝火操作编号超出范围。");
+                    continue;
+                }
+                CampfireActionResult result = executeCampfireAction(actions.get(index));
+                if (result != null) {
+                    System.out.println(result.message());
+                }
+            } catch (NumberFormatException exception) {
+                System.out.println("请输入整数篝火操作编号。");
+            }
+        }
+    }
+
+    private CampfireActionResult executeCampfireAction(CampfireAction action) {
+        return switch (action.id()) {
+            case "rest" -> controller.restAtCampfire();
+            case "smith" -> chooseCampfireCard();
+            case "leave" -> controller.leaveCampfire();
+            default -> throw new IllegalStateException("未知篝火操作：" + action.id());
+        };
+    }
+
+    private CampfireActionResult chooseCampfireCard() {
+        List<CardInstance> cards = controller.getCampfireUpgradeableCards();
+        if (cards.isEmpty()) {
+            return controller.smithAtCampfire("");
+        }
+        System.out.println("可升级卡牌：");
+        for (int i = 0; i < cards.size(); i++) {
+            CardInstance card = cards.get(i);
+            System.out.println("  " + i + " - " + card.displayName()
+                    + " | " + card.displayDescription());
+        }
+        String input = readLine("请输入要升级的卡牌编号：");
+        if (!running) {
+            return null;
+        }
+        try {
+            int index = Integer.parseInt(input);
+            if (index < 0 || index >= cards.size()) {
+                return new CampfireActionResult(
+                        CampfireActionStatus.CARD_NOT_FOUND,
+                        "卡牌编号超出范围。");
+            }
+            return controller.smithAtCampfire(cards.get(index).id());
+        } catch (NumberFormatException exception) {
+            return new CampfireActionResult(
+                    CampfireActionStatus.CARD_NOT_FOUND,
+                    "请输入整数卡牌编号。");
         }
     }
 
@@ -336,18 +497,17 @@ public final class GameFlowDebugMain {
                 + "    护甲：" + combat.getPlayerBlock()
                 + "    能量：" + combat.getEnergy() + " / "
                 + combat.getPlayerMaxEnergy());
-        System.out.println("怪物 HP：" + combat.getMonsterHp() + " / "
+        System.out.println(combat.getMonsterName() + " HP：" + combat.getMonsterHp() + " / "
                 + combat.getMonsterMaxHp()
                 + "    护甲：" + combat.getMonsterBlock()
                 + "    " + combat.getMonsterIntent());
         System.out.println("手牌：");
         for (int i = 0; i < combat.getHand().size(); i++) {
             CardInstance instance = combat.getHand().get(i);
-            Card card = instance.card();
-            System.out.println("  " + i + " - " + card.label()
+            System.out.println("  " + i + " - " + instance.displayName()
                     + " [" + instance.effectiveCost() + "费"
                     + (instance.upgraded() ? ",已升级" : "") + "]"
-                    + " | " + card.description());
+                    + " | " + instance.displayDescription());
         }
         if (combat.getHand().isEmpty()) {
             System.out.println("  （空）");
@@ -387,14 +547,6 @@ public final class GameFlowDebugMain {
         System.out.println("play 0 2   - 打出锻造牌并升级编号为 2 的手牌");
         System.out.println("end        - 结束当前回合");
         System.out.println("quit       - 退出文字流程");
-    }
-
-    private static List<CardInstance> createStartingDeck() {
-        List<Card> definitions = CardLibrary.startingDeck();
-        return IntStream.range(0, definitions.size())
-                .mapToObj(index -> new CardInstance(
-                        "starter-" + (index + 1), definitions.get(index)))
-                .toList();
     }
 
     private static long readSeed(String[] args) {

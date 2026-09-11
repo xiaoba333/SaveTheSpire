@@ -1,5 +1,8 @@
 package com.roguelike.dungeon.game.card;
 
+import com.roguelike.dungeon.game.entity.Power;
+import com.roguelike.dungeon.game.entity.StatusEffect;
+
 /**
  * 卡牌效果可使用的战斗操作集合。
  *
@@ -8,8 +11,12 @@ package com.roguelike.dungeon.game.card;
  */
 public interface CardEffectContext {
 
-    /** 对怪物造成伤害，护甲先吸收。 */
-    void dealDamageToMonster(int amount);
+    /**
+     * 对怪物造成伤害，护甲先吸收。
+     *
+     * @return 本次伤害是否击杀怪物
+     */
+    boolean dealDamageToMonster(int amount);
 
     /** 给怪物增加护甲。 */
     void addMonsterBlock(int amount);
@@ -29,6 +36,27 @@ public interface CardEffectContext {
     /** 为玩家增加当前回合能量。 */
     void addPlayerEnergy(int amount);
 
+    /** 当前卡牌实例是否已经升级。 */
+    boolean isUpgraded();
+
+    /** 玩家当前生命值。 */
+    int getPlayerHealth();
+
+    /** 玩家当前最大生命值。 */
+    int getPlayerMaxHealth();
+
+    /** 提高玩家最大生命值，不恢复当前生命。 */
+    void increasePlayerMaxHealth(int amount);
+
+    /** 降低玩家最大生命值，并把当前生命夹到新上限内。 */
+    void reducePlayerMaxHealth(int amount);
+
+    /** 给敌人叠加指定状态的层数。 */
+    void applyStatusToMonster(StatusEffect effect, int amount);
+
+    /** 给玩家叠加指定状态的层数。 */
+    void applyStatusToPlayer(StatusEffect effect, int amount);
+
     /**
      * 升级当前卡牌效果指定的目标手牌。
      *
@@ -38,6 +66,9 @@ public interface CardEffectContext {
      * @return 升级成功返回 true，否则返回 false
      */
     boolean upgradeCard();
+
+    /** 获得一个能力（能力牌打出时挂到玩家身上，每回合开始触发）。 */
+    void gainPower(Power power);
 
     /** 向战斗日志追加一行文本。 */
     void log(String line);

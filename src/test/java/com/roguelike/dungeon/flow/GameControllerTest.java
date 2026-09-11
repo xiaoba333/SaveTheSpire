@@ -5,8 +5,12 @@ import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
+import com.roguelike.dungeon.game.campfire.CampfireActionStatus;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.event.EventActionStatus;
+import com.roguelike.dungeon.game.event.EventChoice;
 import com.roguelike.dungeon.game.map.MapNode;
+import com.roguelike.dungeon.game.map.MapNodeType;
 import com.roguelike.dungeon.game.run.RunState;
 import com.roguelike.dungeon.game.shop.ShopActionResult;
 import com.roguelike.dungeon.game.shop.ShopItem;
@@ -45,9 +49,11 @@ class GameControllerTest {
         assertEquals(player.getHealth(), combat.getPlayerHp());
         assertTrue(combat.getHand().stream().allMatch(deck::contains));
 
-        playWholeHand(combat);
-        combat.endPlayerTurn();
-        playWholeHand(combat);
+        int safety = 0;
+        while (controller.getPhase() == GamePhase.BATTLE && safety++ < 20) {
+            playWholeHand(combat);
+            combat.endPlayerTurn();
+        }
 
         assertEquals(GamePhase.REWARD, controller.getPhase());
         assertTrue(controller.getCurrentCombat().isEmpty());
@@ -72,7 +78,12 @@ class GameControllerTest {
         MapNode node = controller.getMapService().getAvailableNodes().getFirst();
         controller.selectNode(node.id());
 
-        controller.getCurrentCombat().orElseThrow().endPlayerTurn();
+        Combat combat = controller.getCurrentCombat().orElseThrow();
+        // BATTLE 节点现在按种子随机挑怪，部分怪物首回合先叠甲，循环到战斗结束。
+        int safety = 0;
+        while (controller.getPhase() == GamePhase.BATTLE && safety++ < 20) {
+            combat.endPlayerTurn();
+        }
 
         assertEquals(GamePhase.DEFEAT, controller.getPhase());
         assertEquals(0, player.getHealth());
@@ -104,6 +115,84 @@ class GameControllerTest {
 
         assertEquals(GamePhase.MAP, controller.getPhase());
         assertTrue(controller.getMapService().getCompletedNodeIds().contains(nodeId));
+    }
+
+    @Test
+    void eventChoiceShouldResolveEventAndCompleteMapNode() {
+        GameController controller = new GameController(
+                newRunState(1), REWARD_POOL, line -> { });
+
+        int safetyCounter = 0;
+        while (controller.getPhase() != GamePhase.EVENT && safetyCounter++ < 15) {
+            MapNode node = controller.getMapService().getAvailableNodes().stream()
+                    .filter(candidate -> candidate.type() == MapNodeType.EVENT)
+                    .findFirst()
+                    .orElseGet(() -> controller.getMapService()
+                            .getAvailableNodes().getFirst());
+            controller.selectNode(node.id());
+            if (controller.getPhase() == GamePhase.BATTLE) {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+                controller.skipRewardCard();
+            } else if (controller.getPhase() == GamePhase.SHOP
+                    || controller.getPhase() == GamePhase.REST) {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+            }
+        }
+
+        assertEquals(GamePhase.EVENT, controller.getPhase());
+        int eventNodeId = controller.getCurrentNode().orElseThrow().id();
+        assertTrue(controller.getCurrentEvent().isPresent());
+        EventChoice choice = controller.getCurrentEventChoices().stream()
+                .filter(EventChoice::available)
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(EventActionStatus.SUCCESS,
+                controller.chooseEventChoice(choice.id()).status());
+
+        assertEquals(GamePhase.MAP, controller.getPhase());
+        assertTrue(controller.getCurrentEvent().isEmpty());
+        assertTrue(controller.getCurrentEventChoices().isEmpty());
+        assertTrue(controller.getMapService().getCompletedNodeIds().contains(eventNodeId));
+    }
+
+    @Test
+    void campfireRestShouldHealAndCompleteMapNode() {
+        RunState runState = newRunState(1);
+        runState.getPlayer().setHealth(20);
+        GameController controller = new GameController(
+                runState, REWARD_POOL, line -> { });
+
+        int safetyCounter = 0;
+        while (controller.getPhase() != GamePhase.REST && safetyCounter++ < 15) {
+            MapNode node = controller.getMapService().getAvailableNodes().stream()
+                    .filter(candidate -> candidate.type() == MapNodeType.REST)
+                    .findFirst()
+                    .orElseGet(() -> controller.getMapService()
+                            .getAvailableNodes().getFirst());
+            controller.selectNode(node.id());
+            if (controller.getPhase() == GamePhase.BATTLE) {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+                controller.skipRewardCard();
+            } else if (controller.getPhase() == GamePhase.EVENT
+                    || controller.getPhase() == GamePhase.SHOP) {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+            }
+        }
+
+        assertEquals(GamePhase.REST, controller.getPhase());
+        int restNodeId = controller.getCurrentNode().orElseThrow().id();
+        assertFalse(controller.getCurrentCampfireActions().isEmpty());
+        assertFalse(controller.getCampfireUpgradeableCards().isEmpty());
+
+        assertEquals(CampfireActionStatus.SUCCESS,
+                controller.restAtCampfire().status());
+
+        assertEquals(35, runState.getPlayer().getHealth());
+        assertEquals(GamePhase.MAP, controller.getPhase());
+        assertTrue(controller.getCurrentCampfireActions().isEmpty());
+        assertTrue(controller.getCampfireUpgradeableCards().isEmpty());
+        assertTrue(controller.getMapService().getCompletedNodeIds().contains(restNodeId));
     }
 
     @Test

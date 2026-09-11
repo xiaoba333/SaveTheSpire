@@ -10,15 +10,16 @@ import org.junit.jupiter.api.Test;
 class CardLibraryTest {
 
     @Test
-    void startingDeckHasTenBasicCardsAndForge() {
+    void startingDeckMatchesBloodLordDesign() {
         List<Card> deck = CardLibrary.startingDeck();
 
-        assertEquals(11, deck.size());
-        assertEquals(5, deck.stream().filter(card -> card.type() == CardType.ATTACK).count());
-        assertEquals(6, deck.stream().filter(card -> card.type() == CardType.SKILL).count());
+        assertEquals(10, deck.size());
+        assertEquals(6, deck.stream().filter(card -> card.type() == CardType.ATTACK).count());
+        assertEquals(4, deck.stream().filter(card -> card.type() == CardType.SKILL).count());
         assertTrue(deck.stream().allMatch(card -> card.cost() == 1));
         assertFalse(deck.stream().anyMatch(Card::exhausts));
-        assertTrue(deck.contains(CardLibrary.FORGE));
+        assertTrue(deck.contains(CardLibrary.FEAST));
+        assertTrue(deck.contains(CardLibrary.SACRIFICE_STRIKE));
     }
 
     @Test
@@ -28,5 +29,15 @@ class CardLibraryTest {
         assertEquals(0, bloodletting.cost());
         assertTrue(bloodletting.playable());
         assertFalse(bloodletting.exhausts());
+    }
+
+    @Test
+    void unimplementedEffectCardsShouldNotBeInStartingDeck() {
+        List<Card> deck = CardLibrary.startingDeck();
+
+        assertFalse(deck.contains(CardLibrary.BLOOD_HAPPINESS));
+        assertFalse(deck.contains(CardLibrary.BLOOD_RAIN));
+        assertFalse(deck.contains(CardLibrary.DUSK_VEIL));
+        assertEquals("blood_rain", CardLibrary.byId("blood_rain").id());
     }
 }

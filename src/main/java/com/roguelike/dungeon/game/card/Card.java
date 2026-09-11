@@ -12,6 +12,7 @@ public record Card(
         CardType type,
         int cost,
         String description,
+        String upgradedDescription,
         CardEffect effect,
         boolean exhausts,
         boolean playable,
@@ -21,6 +22,32 @@ public record Card(
         if (cost < 0) {
             throw new IllegalArgumentException("卡牌费用不能为负数");
         }
+    }
+
+    /**
+     * 兼容旧调用：升级说明默认与普通说明相同。
+     */
+    public Card(
+            String id,
+            String name,
+            CardType type,
+            int cost,
+            String description,
+            CardEffect effect,
+            boolean exhausts,
+            boolean playable,
+            boolean upgradable) {
+        this(
+                id,
+                name,
+                type,
+                cost,
+                description,
+                description,
+                effect,
+                exhausts,
+                playable,
+                upgradable);
     }
 
     /**

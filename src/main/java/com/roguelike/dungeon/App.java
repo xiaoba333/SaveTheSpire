@@ -119,10 +119,11 @@ public class App extends Application {
 
     /** 根据当前战斗数据刷新标签、手牌按钮和按钮可用性。 */
     private void refreshView() {
-        playerStatus.setText("玩家  HP " + combat.getPlayerHp() + " / " + Combat.PLAYER_MAX_HP
+        playerStatus.setText("玩家  HP " + combat.getPlayerHp() + " / " + combat.getPlayerMaxHp()
                 + "    护盾 " + combat.getPlayerBlock());
-        energyStatus.setText("能量 " + combat.getEnergy() + " / " + Combat.PLAYER_MAX_ENERGY);
-        monsterStatus.setText("怪物  HP " + combat.getMonsterHp() + " / " + Combat.MONSTER_MAX_HP
+        energyStatus.setText("能量 " + combat.getEnergy() + " / " + combat.getPlayerMaxEnergy());
+        monsterStatus.setText(combat.getMonsterName() + "  HP " + combat.getMonsterHp()
+                + " / " + combat.getMonsterMaxHp()
                 + "    护盾 " + combat.getMonsterBlock()
                 + "    " + combat.getMonsterIntent());
         exhaustStatus.setText("消耗堆 " + combat.getExhaustPileSize());
@@ -140,8 +141,8 @@ public class App extends Application {
         for (int i = 0; i < combat.getHand().size(); i++) {
             CardInstance instance = combat.getHand().get(i);
             Card card = instance.card();
-            Button cardButton = new Button(card.label());
-            cardButton.setTooltip(new Tooltip(card.description()));
+            Button cardButton = new Button(instance.displayName());
+            cardButton.setTooltip(new Tooltip(instance.displayDescription()));
             final int index = i;
             cardButton.setDisable(!combat.isPlayerTurn() || !card.playable());
             cardButton.setOnAction(event -> {

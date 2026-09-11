@@ -4,6 +4,7 @@ import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.StatusEffect;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -17,7 +18,7 @@ class CombatCardEffectContextTest {
     @Test
     void strikeEffectShouldDamageMonsterWithoutCombat() {
         BattleState state = readyState();
-        CombatCardEffectContext context = newContext(state, 1.0);
+        CombatCardEffectContext context = newContext(state, false);
 
         CardLibrary.STRIKE.effect().apply(context);
 
@@ -27,27 +28,38 @@ class CombatCardEffectContextTest {
     @Test
     void defendEffectShouldAddPlayerArmor() {
         BattleState state = readyState();
-        CombatCardEffectContext context = newContext(state, 1.0);
+        CombatCardEffectContext context = newContext(state, false);
 
         CardLibrary.DEFEND.effect().apply(context);
 
-        assertEquals(5, state.getPlayer().getArmor());
+        assertEquals(6, state.getPlayer().getArmor());
     }
 
     @Test
-    void upgradedMultiplierShouldScaleMonsterDamage() {
+    void upgradedFlagShouldBeExposedToCardEffects() {
         BattleState state = readyState();
-        CombatCardEffectContext context = newContext(state, 1.25);
+        CombatCardEffectContext context = newContext(state, true);
 
-        context.dealDamageToMonster(8);
+        assertTrue(context.isUpgraded());
+    }
 
-        assertEquals(20, state.getMonsterHp());
+    @Test
+    void statusMethodsShouldApplyStacksToCombatants() {
+        BattleState state = readyState();
+        CombatCardEffectContext context = newContext(state, false);
+
+        context.applyStatusToMonster(StatusEffect.VULNERABLE, 2);
+        context.applyStatusToMonster(StatusEffect.VULNERABLE, 1);
+        context.applyStatusToPlayer(StatusEffect.WEAK, 2);
+
+        assertEquals(3, state.getMonsterStatusStacks(StatusEffect.VULNERABLE));
+        assertEquals(2, state.getPlayer().getStacks(StatusEffect.WEAK));
     }
 
     @Test
     void selfDamageShouldIgnoreUpgradeMultiplier() {
         BattleState state = readyState();
-        CombatCardEffectContext context = newContext(state, 1.25);
+        CombatCardEffectContext context = newContext(state, false);
 
         context.dealDamageToPlayer(3);
 
@@ -60,7 +72,7 @@ class CombatCardEffectContextTest {
         List<CardInstance> upgraded = new ArrayList<>();
         String targetId = state.getPiles().getHand().getFirst().id();
         CombatCardEffectContext context = new CombatCardEffectContext(
-                state, line -> { }, upgraded::add, 1.0, targetId);
+                state, line -> { }, upgraded::add, targetId, false);
 
         assertTrue(context.upgradeCard());
         assertEquals(1, upgraded.size());
@@ -80,8 +92,9 @@ class CombatCardEffectContextTest {
         return state;
     }
 
-    private static CombatCardEffectContext newContext(BattleState state, double multiplier) {
+    private static CombatCardEffectContext newContext(
+            BattleState state, boolean upgraded) {
         return new CombatCardEffectContext(
-                state, line -> { }, card -> { }, multiplier, null);
+                state, line -> { }, card -> { }, null, upgraded);
     }
 }
