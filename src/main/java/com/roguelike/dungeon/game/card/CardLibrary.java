@@ -339,9 +339,7 @@ public final class CardLibrary {
             4,
             "对指定对象附加状态「死而复生」。",
             "对指定对象附加状态「死而复生」。",
-            context -> {
-                context.applyStatusToPlayer(StatusEffect.REBORN, 1);
-            },
+            context -> { },
             false,
             true,
             true);
@@ -353,7 +351,14 @@ public final class CardLibrary {
             1,
             "对自己造成 1 点伤害，对所有敌人造成 6 点伤害，执行 x 次。",
             "对自己造成 1 点伤害，对所有敌人造成 9 点伤害，执行 x 次。",
-            context -> { },
+            context -> {
+                int x = context.getXCost();
+                for (int i = 0; i < x; i++) {
+                    context.dealDamageToPlayer(1);
+                    context.dealDamageToAllMonsters(
+                            context.isUpgraded() ? 9 : 6);
+                }
+            },
             false,
             true,
             true);
@@ -365,7 +370,13 @@ public final class CardLibrary {
             3,
             "给予所有敌人 99 层易伤，以及状态「血畜」。",
             "给予所有敌人 99 层易伤，99 层虚弱，以及状态「血畜」。",
-            context -> { },
+            context -> {
+                context.applyStatusToAllMonsters(StatusEffect.VULNERABLE, 99);
+                if (context.isUpgraded()) {
+                    context.applyStatusToAllMonsters(StatusEffect.WEAK, 99);
+                }
+                context.applyStatusToAllMonsters(StatusEffect.BLOOD_HERD, 1);
+            },
             false,
             true,
             true);

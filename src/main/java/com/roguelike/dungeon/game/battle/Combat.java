@@ -315,12 +315,14 @@ public class Combat {
             return;
         }
 
+        state.getPlayer().tickEndOfTurn();
         MonsterAi.MonsterTurnResult monsterResult = monsterAi.takeTurn(state);
         if (monsterResult.attacked()) {
             log(monsterAi.name() + "攻击，对玩家造成 " + monsterResult.value() + " 点伤害。");
         } else {
             log(monsterAi.name() + "防御，获得 " + monsterResult.value() + " 点护盾。");
         }
+        state.tickMonsterStatuses();
         checkFinished();
         if (state.isFinished()) {
             return;
