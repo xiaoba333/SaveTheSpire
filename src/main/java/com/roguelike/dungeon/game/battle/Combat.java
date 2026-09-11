@@ -7,6 +7,9 @@ import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.Relic;
+import com.roguelike.dungeon.game.entity.RelicTrigger;
+import com.roguelike.dungeon.game.relic.RelicService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +30,8 @@ public class Combat {
     private final BattleEventBus eventBus;
     private final CardPlayService cardPlayService;
     private final MonsterAi monsterAi;
+    /** 本局共享的遗物分发器；为 null 表示本场战斗不结算遗物。 */
+    private final RelicService relicService;
     private final Consumer<String> logger;
 
     private final List<String> newLogs = new ArrayList<>();
@@ -88,6 +93,26 @@ public class Combat {
             LevelFinishHandler finishHandler,
             Consumer<CardInstance> cardUpgradeHandler,
             MonsterAi monsterAi) {
+        this(player, battleDeck, logger, finishHandler,
+                cardUpgradeHandler, monsterAi, null);
+    }
+
+    /**
+     * 完整装配：额外注入本局的遗物分发器。
+     *
+     * <p>传入遗物分发器后，战斗流程会在各个触发点自动结算遗物，
+     * 并把当前 {@link BattleState} 绑定为遗物可读的战斗视图。</p>
+     *
+     * @param relicService 本局共享的遗物分发器；传 null 表示本场不结算遗物
+     */
+    public Combat(
+            Player player,
+            List<CardInstance> battleDeck,
+            Consumer<String> logger,
+            LevelFinishHandler finishHandler,
+            Consumer<CardInstance> cardUpgradeHandler,
+            MonsterAi monsterAi,
+            RelicService relicService) {
         Objects.requireNonNull(player, "玩家不能为 null");
         Objects.requireNonNull(battleDeck, "战斗牌组不能为 null");
         Objects.requireNonNull(finishHandler, "关卡结束处理器不能为 null");
@@ -98,7 +123,13 @@ public class Combat {
                 player, battleDeck, new CardPiles(logger), monsterAi.maxHp());
         this.eventBus = new BattleEventBus();
         this.eventBus.subscribeFinished(finishHandler);
-        this.cardPlayService = new CardPlayService(this::log, cardUpgradeHandler);
+        this.relicService = relicService;
+        if (this.relicService != null) {
+            this.relicService.bindBattle(this.state);
+            this.state.setRelicService(this.relicService);
+        }
+        this.cardPlayService = new CardPlayService(
+                this::log, cardUpgradeHandler, relicService);
         startNewFight();
     }
 
@@ -132,6 +163,11 @@ public class Combat {
 
     public int getPlayerMaxEnergy() {
         return state.getPlayer().getMaxEnergy();
+    }
+
+    /** 当前玩家持有的遗物，按获得顺序，供界面展示。 */
+    public List<Relic> getRelics() {
+        return state.getPlayer().getRelics();
     }
 
     public int getMonsterMaxHp() {
@@ -267,6 +303,10 @@ public class Combat {
             return;
         }
 
+        // 「回合结束」类遗物必须在这里结算：此时手牌还没弃、本回合护甲和剩余能量都可读，
+        // 「钙化壳」「放血槽」正是靠这一点把资源留到下个回合。
+        fireRelic(RelicTrigger.TURN_END, 0);
+
         state.getPiles().discardHand();
         log("玩家结束回合。");
 
@@ -296,6 +336,8 @@ public class Combat {
         state.setMonsterBlock(0);
         state.setMonsterWillAttack(true);
         monsterAi.startFight();
+        state.clearMonsterStatuses();
+        state.resetBattleCounters();
         state.setFinished(false);
         state.setResultText("");
         state.setResultCode(null);
@@ -310,6 +352,11 @@ public class Combat {
             return;
         }
         beginPlayerTurn();
+
+        // 「战斗开始」类遗物放在最后结算：beginPlayerTurn 会清空护甲，
+        // 提前给的开战护甲（如「船锚」）会被抹掉。
+        fireRelic(RelicTrigger.BATTLE_START, 0);
+        checkFinished();
     }
 
     /** 玩家回合开始：清空自身未消耗护盾（参考杀戮尖塔），触发能力，再抽满手牌。 */
@@ -319,9 +366,20 @@ public class Combat {
         player.clearArmor();
         player.refresh();
         player.triggerTurnStart();
+        state.resetTurnCounters();
+        // 「回合开始」类遗物在护甲清空、能量刷新之后结算，
+        // 「钙化壳」「放血槽」需要把上一回合存下的资源补回来。
+        fireRelic(RelicTrigger.TURN_START, 0);
         state.getPiles().drawToHandSize(HAND_SIZE);
         log("—— 玩家回合 —— 能量 " + player.getEnergy()
                 + "，抽牌 " + state.getPiles().getHandSize() + " 张。");
+    }
+
+    /** 分发一次遗物触发；未接入遗物时忽略。 */
+    private void fireRelic(RelicTrigger trigger, int value) {
+        if (relicService != null) {
+            relicService.fire(trigger, value);
+        }
     }
 
     private void checkFinished() {
@@ -333,7 +391,10 @@ public class Combat {
             state.setPlayerTurn(false);
             state.setResultText("胜利：怪物血量已归零。");
             state.setResultCode("VICTORY");
+            fireRelic(RelicTrigger.ENEMY_KILLED, 0);
             log(state.getResultText());
+            // 只在胜利时结算：失败会直接结束整局，回血没有意义。
+            fireRelic(RelicTrigger.BATTLE_END, 0);
             eventBus.publishFinished(LevelResult.COMPLETED);
         } else if (state.getPlayer().isDead()) {
             state.setFinished(true);
