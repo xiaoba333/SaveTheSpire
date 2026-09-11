@@ -15,11 +15,12 @@ class CharacterCatalogTest {
     private final CharacterCatalog catalog = new GameCharacterCatalog();
 
     @Test
-    void catalogExposesOneCharacter() {
+    void catalogExposesBothCharacters() {
         List<CharacterDefinition> characters = catalog.getAvailableCharacters();
 
-        assertEquals(1, characters.size());
-        assertEquals("blood", characters.getFirst().id());
+        assertEquals(2, characters.size());
+        assertEquals("blood", characters.get(0).id());
+        assertEquals("warrior", characters.get(1).id());
     }
 
     @Test
@@ -38,6 +39,21 @@ class CharacterCatalogTest {
     void startingCardIdsAreResolvableInCardLibrary() {
         CharacterDefinition character = catalog.getById("blood");
 
+        for (String cardId : character.startingCardIds()) {
+            assertEquals(cardId, CardLibrary.byId(cardId).id());
+        }
+    }
+
+    @Test
+    void warriorCharacterHasContractFields() {
+        CharacterDefinition character = catalog.getById("warrior");
+
+        assertEquals("warrior", character.id());
+        assertEquals("战士", character.name());
+        assertEquals(50, character.maxHealth());
+        assertEquals(3, character.maxEnergy());
+        assertEquals(150, character.startingGold());
+        assertEquals(10, character.startingCardIds().size());
         for (String cardId : character.startingCardIds()) {
             assertEquals(cardId, CardLibrary.byId(cardId).id());
         }

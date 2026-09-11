@@ -1,9 +1,13 @@
 package com.roguelike.dungeon.http;
 
+import com.roguelike.dungeon.game.campfire.CampfireAction;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
+import com.roguelike.dungeon.game.character.CharacterDefinition;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.entity.Relic;
+import com.roguelike.dungeon.game.event.EventChoice;
+import com.roguelike.dungeon.game.event.GameEvent;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeState;
 import com.roguelike.dungeon.game.map.MapService;
@@ -11,7 +15,6 @@ import com.roguelike.dungeon.game.reward.BattleReward;
 import com.roguelike.dungeon.game.run.RunState;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * 把 {@link RunState} / {@link MapService} / {@link BattleReward} 等映射为
@@ -45,6 +48,27 @@ public final class GameStateJson {
               .append(",\"name\":").append(Json.str(relic.name()))
               .append(",\"description\":").append(Json.str(relic.description()))
               .append(",\"icon\":null}");
+        }
+        sb.append("]}");
+        return sb.toString();
+    }
+
+    /** 可选角色列表（选角界面用）。 */
+    public static String charactersJson(List<CharacterDefinition> characters) {
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"characters\":[");
+        for (int i = 0; i < characters.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            CharacterDefinition c = characters.get(i);
+            sb.append("{\"id\":").append(Json.str(c.id()))
+              .append(",\"name\":").append(Json.str(c.name()))
+              .append(",\"description\":").append(Json.str(c.description()))
+              .append(",\"maxHealth\":").append(c.maxHealth())
+              .append(",\"maxEnergy\":").append(c.maxEnergy())
+              .append(",\"startingGold\":").append(c.startingGold())
+              .append('}');
         }
         sb.append("]}");
         return sb.toString();
@@ -141,22 +165,77 @@ public final class GameStateJson {
 
     // ---------- 商店 ----------
 
-    public static String shopJson(int gold, List<ShopItem> items, Set<String> sold) {
+    /**
+     * 真实商店快照：金币、未售出的卡牌商品、可删卡列表、删卡状态与价格。
+     * availableItems 来自 ShopService.getAvailableItems()（只含未售出），故 sold 恒 false。
+     */
+    public static String shopJson(
+            int gold,
+            List<com.roguelike.dungeon.game.shop.ShopItem> availableItems,
+            List<CardInstance> removableCards,
+            boolean cardRemovalUsed,
+            int cardRemovalPrice) {
         StringBuilder sb = new StringBuilder(512);
         sb.append("{\"gold\":").append(gold).append(",\"items\":[");
-        for (int i = 0; i < items.size(); i++) {
+        for (int i = 0; i < availableItems.size(); i++) {
             if (i > 0) {
                 sb.append(',');
             }
-            ShopItem item = items.get(i);
+            com.roguelike.dungeon.game.shop.ShopItem item = availableItems.get(i);
             sb.append("{\"id\":").append(Json.str(item.id()))
-              .append(",\"name\":").append(Json.str(item.name()))
-              .append(",\"kind\":").append(Json.str(item.kind()))
+              .append(",\"name\":").append(Json.str(item.card().name()))
+              .append(",\"kind\":\"CARD\"")
               .append(",\"price\":").append(item.price())
-              .append(",\"description\":").append(Json.str(item.description()))
-              .append(",\"rarity\":").append(Json.str(item.rarity()))
-              .append(",\"sold\":").append(sold.contains(item.id()))
+              .append(",\"description\":").append(Json.str(item.card().description()))
+              .append(",\"rarity\":\"COMMON\"")
+              .append(",\"sold\":false")
               .append('}');
+        }
+        sb.append("],\"removableCards\":[");
+        for (int i = 0; i < removableCards.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(cardInstanceJson(removableCards.get(i)));
+        }
+        sb.append("],\"cardRemovalUsed\":").append(cardRemovalUsed)
+          .append(",\"cardRemovalPrice\":").append(cardRemovalPrice)
+          .append('}');
+        return sb.toString();
+    }
+
+    /** 不在商店阶段时的空商店（避免前端解析到 null）。 */
+    public static String emptyShopJson() {
+        return "{\"gold\":0,\"items\":[],\"removableCards\":[],"
+                + "\"cardRemovalUsed\":false,\"cardRemovalPrice\":0}";
+    }
+
+    // ---------- 篝火 ----------
+
+    /** 当前篝火操作与可锻造的永久牌组卡牌。 */
+    public static String campfireJson(
+            List<CampfireAction> actions,
+            List<CardInstance> upgradeableCards) {
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"actions\":[");
+        for (int i = 0; i < actions.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            CampfireAction action = actions.get(i);
+            sb.append("{\"id\":").append(Json.str(action.id()))
+              .append(",\"label\":").append(Json.str(action.label()))
+              .append(",\"description\":").append(Json.str(action.description()))
+              .append(",\"available\":").append(action.available())
+              .append(",\"unavailableReason\":").append(Json.str(action.unavailableReason()))
+              .append('}');
+        }
+        sb.append("],\"upgradeableCards\":[");
+        for (int i = 0; i < upgradeableCards.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(cardInstanceJson(upgradeableCards.get(i)));
         }
         sb.append("]}");
         return sb.toString();
@@ -164,17 +243,29 @@ public final class GameStateJson {
 
     // ---------- 事件 ----------
 
-    /** 固定示例事件（与前端 Mock 对齐，选项后果由 GameServer 结算）。 */
-    public static String eventJson() {
-        return "{\"id\":\"broken_statue\","
-            + "\"title\":" + Json.str("破损的雕像") + ","
-            + "\"description\":" + Json.str("一座古老的雕像立在路中央，基座上刻着模糊的文字。\n你隐约感到其中藏着某种力量。") + ","
-            + "\"choices\":["
-            + "{\"id\":\"offer\",\"label\":" + Json.str("献上祭品（获得一张卡）") + ",\"disabled\":false},"
-            + "{\"id\":\"pray\",\"label\":" + Json.str("虔诚祈祷（恢复 5 点生命）") + ",\"disabled\":false},"
-            + "{\"id\":\"shatter\",\"label\":" + Json.str("摧毁雕像（失去 5 点生命，获得 50 金币）") + ",\"disabled\":false},"
-            + "{\"id\":\"touch\",\"label\":" + Json.str("触碰雕像（需要 10 点以上生命）") + ",\"disabled\":true}"
-            + "]}";
+    /** 当前真实事件及其选项快照（由 EventCatalog / EventService 计算）。 */
+    public static String eventJson(GameEvent event, List<EventChoice> choices) {
+        if (event == null) {
+            return "{\"id\":\"\",\"title\":\"\",\"description\":\"\",\"choices\":[]}";
+        }
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"id\":").append(Json.str(event.id()))
+          .append(",\"title\":").append(Json.str(event.title()))
+          .append(",\"description\":").append(Json.str(event.description()))
+          .append(",\"choices\":[");
+        for (int i = 0; i < choices.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            EventChoice choice = choices.get(i);
+            sb.append("{\"id\":").append(Json.str(choice.id()))
+              .append(",\"label\":").append(Json.str(choice.label()))
+              .append(",\"description\":").append(Json.str(choice.description()))
+              .append(",\"disabled\":").append(!choice.available())
+              .append('}');
+        }
+        sb.append("]}");
+        return sb.toString();
     }
 
     // ---------- 卡牌序列化助手 ----------

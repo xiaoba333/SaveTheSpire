@@ -16,6 +16,11 @@ public final class CultistAi implements MonsterAi {
     }
 
     @Override
+    public String id() {
+        return "cultist";
+    }
+
+    @Override
     public int maxHp() {
         return 48;
     }

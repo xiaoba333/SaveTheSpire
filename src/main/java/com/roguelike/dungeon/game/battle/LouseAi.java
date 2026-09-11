@@ -16,6 +16,11 @@ public final class LouseAi implements MonsterAi {
     }
 
     @Override
+    public String id() {
+        return "louse";
+    }
+
+    @Override
     public int maxHp() {
         return 13;
     }

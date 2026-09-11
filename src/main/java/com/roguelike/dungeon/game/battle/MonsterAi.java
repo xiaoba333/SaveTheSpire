@@ -12,6 +12,9 @@ public interface MonsterAi {
     /** 怪物中文名。 */
     String name();
 
+    /** 怪物英文标识（前端按此选择敌人视觉，如 "cultist" / "jawWormAlt"）。 */
+    String id();
+
     /** 怪物最大生命值。 */
     int maxHp();
 

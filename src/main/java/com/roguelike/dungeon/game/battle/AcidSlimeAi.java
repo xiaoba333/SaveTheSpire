@@ -13,6 +13,11 @@ public final class AcidSlimeAi implements MonsterAi {
     }
 
     @Override
+    public String id() {
+        return "acidSlime";
+    }
+
+    @Override
     public int maxHp() {
         return 30;
     }

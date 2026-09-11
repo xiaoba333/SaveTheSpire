@@ -17,6 +17,11 @@ public final class JawWormAi implements MonsterAi {
     }
 
     @Override
+    public String id() {
+        return "jawWormAlt";
+    }
+
+    @Override
     public int maxHp() {
         return 44;
     }

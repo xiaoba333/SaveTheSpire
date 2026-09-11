@@ -38,6 +38,11 @@ public final class MonsterAiService implements MonsterAi {
     }
 
     @Override
+    public String id() {
+        return "guardian";
+    }
+
+    @Override
     public int maxHp() {
         return DEFAULT_MAX_HP;
     }
