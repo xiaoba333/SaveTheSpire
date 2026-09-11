@@ -33,8 +33,8 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * 可在 IntelliJ 控制台中运行的纯文字游戏流程。
  *
- * <p>这只是调试入口，不参与核心规则，未来 Unity 可以直接调用
- * 同一个 {@link GameController}。</p>
+ * <p>这只是调试入口，不参与核心规则。图形界面请运行 {@code FlowApp}，
+ * 它调用同一个 {@link GameController}。</p>
  */
 public final class GameFlowDebugMain {
     private static final int DEFAULT_ACT_COUNT = 1;

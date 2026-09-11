@@ -472,9 +472,8 @@ public final class CardLibrary {
     /**
      * 血之领主专属奖励卡池。
      *
-     * <p>保留 {@link #FEAST} 和 {@link #BLOOD_DEVOTION_STRIKE}；
-     * 不收录重复的 {@link #BLOOD_FEAST}、{@link #SACRIFICE_STRIKE}，
-     * 也不收录效果尚未实现的牌。</p>
+     * <p>保留 {@link #FEAST} 和 {@link #SACRIFICE_STRIKE}，
+     * 不收录效果尚未实现的牌。</p>
      */
     public static List<Card> bloodLordRewardCards() {
         return List.of(
@@ -484,7 +483,7 @@ public final class CardLibrary {
                 BLOOD_SACRIFICE,
                 BLOOD_TRANSFUSION,
                 FEAST,
-                BLOOD_DEVOTION_STRIKE,
+                SACRIFICE_STRIKE,
                 BLOOD_LACERATION,
                 CRIMSON_POOL,
                 BLOOD_STRIP,

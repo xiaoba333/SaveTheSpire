@@ -45,7 +45,7 @@ public interface CardEffectContext {
     /** 玩家当前最大生命值。 */
     int getPlayerMaxHealth();
 
-    /** 提高玩家最大生命值，不恢复当前生命。 */
+    /** 提高玩家最大生命值，并同步恢复等量当前生命。 */
     void increasePlayerMaxHealth(int amount);
 
     /** 降低玩家最大生命值，并把当前生命夹到新上限内。 */

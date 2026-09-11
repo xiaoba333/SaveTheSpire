@@ -1,31 +1,44 @@
 package com.roguelike.dungeon.game.battle;
 
+import com.roguelike.dungeon.game.enemy.bestiary.ActOneBestiary;
+
 import java.util.List;
 import java.util.Random;
-import java.util.function.Supplier;
 
 /**
- * 怪物目录：按种子从「第一章前几场」的普通怪物里挑一只。
+ * 按地图节点挑选第一章怪物：四种普通小怪、巨人遗骸、凯洛斯蛋链。
  */
 public final class MonsterCatalog {
 
-    private static final List<Supplier<MonsterAi>> EASY_POOL = List.of(
-            CultistAi::new,
-            JawWormAi::new,
-            LouseAi::new,
-            AcidSlimeAi::new);
+    private static final List<String> NORMAL_IDS = List.of(
+            "grub",
+            "wraith",
+            "skeleton",
+            "explorer_female");
 
     private MonsterCatalog() {
     }
 
-    /**
-     * 按种子确定性挑选一只普通怪物。
-     *
-     * @param seed 本局 / 本节点的种子
-     * @return 一个全新的怪物 AI 实例
-     */
+    static {
+        ActOneBestiary.init();
+    }
+
+    /** 普通战斗：蛆 / 亡灵 / 骷髅 / 探险者女 四选一。 */
     public static MonsterAi randomEasy(long seed) {
-        Random random = new Random(seed);
-        return EASY_POOL.get(random.nextInt(EASY_POOL.size())).get();
+        ActOneBestiary.init();
+        String id = NORMAL_IDS.get(new Random(seed).nextInt(NORMAL_IDS.size()));
+        return ScriptedMonsterAi.of(id);
+    }
+
+    /** 精英：巨人遗骸。 */
+    public static MonsterAi elite() {
+        ActOneBestiary.init();
+        return ScriptedMonsterAi.of("giant_remains");
+    }
+
+    /** Boss：从无暇蛋开始，破裂后进入凯洛斯体系。 */
+    public static MonsterAi boss() {
+        ActOneBestiary.init();
+        return ScriptedMonsterAi.of("kairos_egg_1");
     }
 }

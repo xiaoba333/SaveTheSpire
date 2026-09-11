@@ -1,0 +1,148 @@
+.title-root {
+    -fx-background-color: #0b0e12;
+}
+
+.title-dim {
+    -fx-background-color: linear-gradient(
+        to right,
+        rgba(8, 10, 14, 0.78) 0%,
+        rgba(8, 10, 14, 0.42) 38%,
+        rgba(8, 10, 14, 0.10) 68%,
+        rgba(8, 10, 14, 0.00) 100%
+    );
+}
+
+.title-buttons {
+    -fx-padding: 0 0 72 56;
+}
+
+.title-button {
+    -fx-background-color: rgba(16, 18, 22, 0.72);
+    -fx-background-radius: 1;
+    -fx-border-color: #7d6f4e;
+    -fx-border-width: 1.4;
+    -fx-border-radius: 1;
+    -fx-text-fill: #e6dcc4;
+    -fx-font-family: "Palatino Linotype", "KaiTi", "STKaiti", "Microsoft YaHei";
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-padding: 12 28 12 28;
+    -fx-min-width: 248;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 16, 0.18, 0, 4);
+}
+
+.title-button:hover {
+    -fx-background-color: rgba(42, 36, 24, 0.86);
+    -fx-border-color: #d4c089;
+    -fx-text-fill: #f6edd6;
+    -fx-effect: dropshadow(gaussian, rgba(212, 192, 137, 0.28), 18, 0.2, 0, 0);
+}
+
+.title-button:pressed {
+    -fx-background-color: rgba(10, 12, 16, 0.92);
+    -fx-border-color: #a89463;
+}
+
+.title-button-leave {
+    -fx-font-size: 16px;
+    -fx-text-fill: #b7ae9c;
+    -fx-border-color: #5e5748;
+    -fx-background-color: rgba(12, 14, 16, 0.55);
+    -fx-padding: 8 28 8 28;
+}
+
+.title-button-leave:hover {
+    -fx-text-fill: #d8d0be;
+    -fx-border-color: #8f8468;
+    -fx-background-color: rgba(28, 24, 20, 0.78);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 12, 0.15, 0, 3);
+}
+
+.battle-root {
+    -fx-background-color: linear-gradient(
+        to bottom,
+        #1c1410 0%,
+        #3a2a1c 48%,
+        #24180f 100%
+    );
+}
+
+.player-hud {
+    -fx-background-color: rgba(12, 10, 8, 0.62);
+    -fx-border-color: #7d6f4e;
+    -fx-border-width: 1.2;
+    -fx-background-radius: 2;
+    -fx-min-width: 240;
+}
+
+.hud-title {
+    -fx-text-fill: #e6dcc4;
+    -fx-font-size: 16px;
+    -fx-font-family: "Palatino Linotype", "KaiTi", "Microsoft YaHei";
+}
+
+.hud-energy {
+    -fx-text-fill: #d4c089;
+    -fx-font-size: 15px;
+}
+
+.intent-label {
+    -fx-text-fill: #f0d9a0;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.hp-bar {
+    -fx-accent: #8a2a2a;
+    -fx-pref-height: 12;
+}
+
+.hp-bar .bar {
+    -fx-background-color: #9b2e2e;
+}
+
+.battle-hint {
+    -fx-text-fill: #cbbc9e;
+    -fx-font-size: 13px;
+}
+
+.hand-card {
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 12, 0.2, 0, 3);
+}
+
+.text-card-face {
+    -fx-background-color: #f0e6d2;
+    -fx-border-color: #3a2a18;
+    -fx-border-width: 2;
+}
+
+.text-card-cost {
+    -fx-text-fill: #7a1f1f;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.text-card-name {
+    -fx-text-fill: #1c120c;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.text-card-type {
+    -fx-text-fill: #6a4e2e;
+    -fx-font-size: 12px;
+}
+
+.text-card-desc {
+    -fx-text-fill: #2a2118;
+    -fx-font-size: 12px;
+}
+
+.battle-root .title-button {
+    -fx-min-width: 140;
+    -fx-font-size: 16px;
+    -fx-padding: 8 18 8 18;
+}
+

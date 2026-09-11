@@ -47,7 +47,7 @@ public class Combat {
                 logger,
                 result -> { },
                 upgradedCard -> { },
-                MonsterAiService.regular());
+                ScriptedMonsterAi.of("skeleton"));
     }
 
     /**
@@ -81,7 +81,7 @@ public class Combat {
                 logger,
                 finishHandler,
                 cardUpgradeHandler,
-                MonsterAiService.regular());
+                ScriptedMonsterAi.of("skeleton"));
     }
 
     /**
@@ -316,11 +316,12 @@ public class Combat {
         }
 
         state.getPlayer().tickEndOfTurn();
+        String actingIntent = monsterAi.intentText(state);
         MonsterAi.MonsterTurnResult monsterResult = monsterAi.takeTurn(state);
         if (monsterResult.attacked()) {
-            log(monsterAi.name() + "攻击，对玩家造成 " + monsterResult.value() + " 点伤害。");
+            log(monsterAi.name() + "发动攻击（" + actingIntent + "）。");
         } else {
-            log(monsterAi.name() + "防御，获得 " + monsterResult.value() + " 点护盾。");
+            log(monsterAi.name() + "行动：" + actingIntent);
         }
         state.tickMonsterStatuses();
         checkFinished();
@@ -338,7 +339,7 @@ public class Combat {
         state.setMonsterHp(state.getMonsterMaxHp());
         state.setMonsterBlock(0);
         state.setMonsterWillAttack(true);
-        monsterAi.startFight();
+        monsterAi.startFight(state);
         state.clearMonsterStatuses();
         state.resetBattleCounters();
         state.setFinished(false);

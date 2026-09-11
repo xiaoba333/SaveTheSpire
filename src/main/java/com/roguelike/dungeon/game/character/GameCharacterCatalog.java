@@ -35,25 +35,25 @@ public final class GameCharacterCatalog implements CharacterCatalog {
             RelicLibrary.BURNING_BLOOD);
 
     /**
-     * 「血祭者」：初始血量 10，起始牌组 4 攻击 + 4 防御 + 御血术 + 狂宴。
+     * 「血祭者」：初始血量 30，起始牌组 4 攻击 + 4 防御 + 御血术 + 狂宴。
      */
     public static final CharacterDefinition BLOOD_PRICE_CHARACTER = new CharacterDefinition(
             "blood",
             "血祭者",
             "以血为代价战斗的战士，初始血量极低。",
-            10,
+            30,
             3,
             0,
             List.of(
-                    CardLibrary.BLOOD_ATTACK.id(),
-                    CardLibrary.BLOOD_ATTACK.id(),
-                    CardLibrary.BLOOD_ATTACK.id(),
-                    CardLibrary.BLOOD_ATTACK.id(),
-                    CardLibrary.BLOOD_DEFEND.id(),
-                    CardLibrary.BLOOD_DEFEND.id(),
-                    CardLibrary.BLOOD_DEFEND.id(),
-                    CardLibrary.BLOOD_DEFEND.id(),
-                    CardLibrary.BLOOD_DEVOTION_STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.SACRIFICE_STRIKE.id(),
                     CardLibrary.FEAST.id()),
             CardLibrary.bloodLordRewardCardIds(),
             "");

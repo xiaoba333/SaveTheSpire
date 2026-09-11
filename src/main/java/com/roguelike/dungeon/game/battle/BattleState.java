@@ -7,6 +7,9 @@ import com.roguelike.dungeon.game.entity.BattleInfo;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.entity.RelicTrigger;
 import com.roguelike.dungeon.game.entity.StatusEffect;
+import com.roguelike.dungeon.game.enemy.DamageContext;
+import com.roguelike.dungeon.game.enemy.Monster;
+import com.roguelike.dungeon.game.enemy.status.StatusIds;
 import com.roguelike.dungeon.game.relic.RelicService;
 
 import java.util.EnumMap;
@@ -29,10 +32,11 @@ public final class BattleState implements BattleInfo {
     private final Player player;
     private final CardPiles piles;
     private final List<CardInstance> battleDeck;
-    private final int monsterMaxHp;
-
+    private int monsterMaxHp;
     private int monsterHp;
     private int monsterBlock;
+    /** 脚本怪实体；测试木桩战斗为 null，此时仍用上面的整数血量。 */
+    private Monster livingMonster;
     /** 怪物身上的状态（易伤 / 虚弱 / 中毒）。玩家有独立的状态存储。 */
     private final Map<StatusEffect, Integer> monsterStatuses =
             new EnumMap<>(StatusEffect.class);
@@ -97,6 +101,28 @@ public final class BattleState implements BattleInfo {
 
     public void setMonsterHp(int monsterHp) {
         this.monsterHp = monsterHp;
+    }
+
+    /** 绑定脚本怪实体，之后伤害与护甲以该实体为准。 */
+    public void bindLivingMonster(Monster monster) {
+        this.livingMonster = monster;
+        if (monster != null) {
+            syncFromLivingMonster();
+        }
+    }
+
+    public Monster getLivingMonster() {
+        return livingMonster;
+    }
+
+    /** 把脚本怪的血量 / 护甲 / 上限同步回战斗状态，供 UI 与胜负判定读取。 */
+    public void syncFromLivingMonster() {
+        if (livingMonster == null) {
+            return;
+        }
+        monsterMaxHp = livingMonster.getMaxHealth();
+        monsterHp = livingMonster.getHealth();
+        monsterBlock = livingMonster.getArmor();
     }
 
     public int getMonsterBlock() {
@@ -282,6 +308,11 @@ public final class BattleState implements BattleInfo {
         if (amount <= 0) {
             return 0;
         }
+        if (livingMonster != null) {
+            int lost = livingMonster.takeTrueDamage(amount);
+            syncFromLivingMonster();
+            return lost;
+        }
         int before = monsterHp;
         monsterHp = Math.max(0, monsterHp - amount);
         return before - monsterHp;
@@ -309,6 +340,13 @@ public final class BattleState implements BattleInfo {
             }
             if (monsterStacks(StatusEffect.VULNERABLE) > 0) {
                 modified = modified * 3 / 2;
+            }
+            if (livingMonster != null) {
+                DamageContext ctx = new DamageContext(
+                        modified, livingMonster, true, player);
+                int hpLoss = livingMonster.receiveDamage(ctx);
+                syncFromLivingMonster();
+                return hpLoss;
             }
             int absorbed = Math.min(monsterBlock, modified);
             monsterBlock -= absorbed;
@@ -342,12 +380,24 @@ public final class BattleState implements BattleInfo {
         if (effect == null) {
             return;
         }
+        if (amount > 0 && livingMonster != null && livingMonster.blocksStatus(toStatusId(effect))) {
+            return;
+        }
         int next = Math.max(0, monsterStatuses.getOrDefault(effect, 0) + amount);
         if (next == 0) {
             monsterStatuses.remove(effect);
         } else {
             monsterStatuses.put(effect, next);
         }
+    }
+
+    private static String toStatusId(StatusEffect effect) {
+        return switch (effect) {
+            case VULNERABLE -> StatusIds.VULNERABLE;
+            case WEAK -> StatusIds.WEAK;
+            case POISON -> StatusIds.POISON;
+            default -> effect.name().toLowerCase();
+        };
     }
 
     /** 获取怪物指定状态的当前层数。 */
@@ -359,7 +409,7 @@ public final class BattleState implements BattleInfo {
     public void tickMonsterStatuses() {
         int poison = getMonsterStatusStacks(StatusEffect.POISON);
         if (poison > 0) {
-            monsterHp = Math.max(0, monsterHp - poison);
+            dealDirectDamageToMonster(poison);
             addMonsterStatus(StatusEffect.POISON, -1);
         }
         addMonsterStatus(StatusEffect.VULNERABLE, -1);

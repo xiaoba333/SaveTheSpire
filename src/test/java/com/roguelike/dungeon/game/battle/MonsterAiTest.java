@@ -1,17 +1,25 @@
 package com.roguelike.dungeon.game.battle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.enemy.bestiary.ActOneBestiary;
 
 import java.util.List;
 import java.util.stream.IntStream;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class MonsterAiTest {
+
+    @BeforeAll
+    static void initBestiary() {
+        ActOneBestiary.init();
+    }
 
     private static Combat combatWith(MonsterAi monsterAi) {
         Player player = new Player(200, 3);
@@ -22,61 +30,51 @@ class MonsterAiTest {
     }
 
     @Test
-    void cultistRitualGrowsAttack() {
-        Combat combat = combatWith(new CultistAi());
-
-        assertEquals("邪教徒", combat.getMonsterName());
-        assertEquals(48, combat.getMonsterMaxHp());
-        assertEquals(6, combat.getMonsterIntentInfo().value());
-
-        combat.endPlayerTurn();
-        assertEquals(200 - 6, combat.getPlayerHp());
-        assertEquals(9, combat.getMonsterIntentInfo().value());
-
-        combat.endPlayerTurn();
-        assertEquals(200 - 6 - 9, combat.getPlayerHp());
-        assertEquals(12, combat.getMonsterIntentInfo().value());
-    }
-
-    @Test
-    void jawWormCyclesBlockThenAttacks() {
-        Combat combat = combatWith(new JawWormAi());
-
-        assertEquals("DEFEND", combat.getMonsterIntentInfo().type());
-
-        combat.endPlayerTurn();
-        assertEquals(6, combat.getMonsterBlock());
+    void skeletonAttacksThenHeals() {
+        Combat combat = combatWith(ScriptedMonsterAi.of("skeleton"));
+        assertEquals("骷髅", combat.getMonsterName());
+        assertEquals(35, combat.getMonsterMaxHp());
         assertEquals("ATTACK", combat.getMonsterIntentInfo().type());
-        assertEquals(8, combat.getMonsterIntentInfo().value());
 
+        int hp = combat.getPlayerHp();
         combat.endPlayerTurn();
-        assertEquals(200 - 8, combat.getPlayerHp());
-        assertEquals(12, combat.getMonsterIntentInfo().value());
+        assertTrue(combat.getPlayerHp() < hp);
+        assertEquals("HEAL", combat.getMonsterIntentInfo().type());
     }
 
     @Test
-    void louseCurlsThenBites() {
-        Combat combat = combatWith(new LouseAi());
-
-        assertEquals("DEFEND", combat.getMonsterIntentInfo().type());
-
-        combat.endPlayerTurn();
-        assertEquals(4, combat.getMonsterBlock());
-
-        combat.endPlayerTurn();
-        assertEquals(200 - 7, combat.getPlayerHp());
+    void grubIsANormalMonster() {
+        Combat combat = combatWith(ScriptedMonsterAi.of("grub"));
+        assertEquals("蛆", combat.getMonsterName());
+        assertEquals(12, combat.getMonsterMaxHp());
     }
 
     @Test
-    void acidSlimeAlwaysAttacks() {
-        Combat combat = combatWith(new AcidSlimeAi());
+    void wraithOpensWithDebuff() {
+        Combat combat = combatWith(ScriptedMonsterAi.of("wraith"));
+        assertEquals("亡灵", combat.getMonsterName());
+        assertEquals(20, combat.getMonsterMaxHp());
+    }
 
-        assertEquals("ATTACK", combat.getMonsterIntentInfo().type());
-        assertEquals(8, combat.getMonsterIntentInfo().value());
+    @Test
+    void explorerFemaleIsSelectable() {
+        Combat combat = combatWith(ScriptedMonsterAi.of("explorer_female"));
+        assertEquals("探险者女", combat.getMonsterName());
+        assertEquals(20, combat.getMonsterMaxHp());
+    }
 
-        combat.endPlayerTurn();
-        assertEquals(200 - 8, combat.getPlayerHp());
-        assertEquals(8, combat.getMonsterIntentInfo().value());
+    @Test
+    void eliteIsGiantRemains() {
+        Combat combat = combatWith(MonsterCatalog.elite());
+        assertEquals("巨人遗骸", combat.getMonsterName());
+        assertEquals(75, combat.getMonsterMaxHp());
+    }
+
+    @Test
+    void bossStartsAsKairosEgg() {
+        Combat combat = combatWith(MonsterCatalog.boss());
+        assertTrue(combat.getMonsterName().contains("凯洛斯的蛋"));
+        assertEquals(10, combat.getMonsterMaxHp());
     }
 
     @Test

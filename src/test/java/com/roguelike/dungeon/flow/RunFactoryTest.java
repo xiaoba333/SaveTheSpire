@@ -16,8 +16,8 @@ class RunFactoryTest {
     void createRunShouldBuildPlayerAndDeckFromCharacter() {
         RunState runState = RunFactory.createRun(catalog, "blood", 12345L, 1);
 
-        assertEquals(10, runState.getPlayer().getMaxHealth());
-        assertEquals(10, runState.getPlayer().getHealth());
+        assertEquals(30, runState.getPlayer().getMaxHealth());
+        assertEquals(30, runState.getPlayer().getHealth());
         assertEquals(3, runState.getPlayer().getMaxEnergy());
         assertEquals(0, runState.getGold());
         assertEquals(10, runState.getDeck().size());

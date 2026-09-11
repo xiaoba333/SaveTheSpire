@@ -36,9 +36,7 @@ class CardLibraryTest {
         List<Card> pool = CardLibrary.bloodLordRewardCards();
 
         assertTrue(pool.contains(CardLibrary.FEAST));
-        assertTrue(pool.contains(CardLibrary.BLOOD_DEVOTION_STRIKE));
-        assertFalse(pool.contains(CardLibrary.BLOOD_FEAST));
-        assertFalse(pool.contains(CardLibrary.SACRIFICE_STRIKE));
+        assertTrue(pool.contains(CardLibrary.SACRIFICE_STRIKE));
         assertFalse(pool.contains(CardLibrary.FORGE));
         assertTrue(CardLibrary.rewardPoolFor(CardLibrary.bloodLordRewardCardIds())
                 .contains(CardLibrary.FORGE));

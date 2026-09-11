@@ -51,13 +51,12 @@ class CharacterCatalogTest {
 
         assertEquals("blood", character.id());
         assertEquals("血祭者", character.name());
-        assertEquals(10, character.maxHealth());
+        assertEquals(30, character.maxHealth());
         assertEquals(3, character.maxEnergy());
         assertEquals(0, character.startingGold());
         assertEquals(10, character.startingCardIds().size());
         assertTrue(character.startingCardIds().contains(CardLibrary.FEAST.id()));
-        assertTrue(character.startingCardIds().contains(CardLibrary.BLOOD_DEVOTION_STRIKE.id()));
-        assertFalse(character.startingCardIds().contains(CardLibrary.BLOOD_FEAST.id()));
+        assertTrue(character.startingCardIds().contains(CardLibrary.SACRIFICE_STRIKE.id()));
         assertEquals(CardLibrary.bloodLordRewardCardIds(), character.rewardCardIds());
         assertTrue(character.startingRelicId().isBlank());
     }
