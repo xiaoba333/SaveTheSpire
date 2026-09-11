@@ -21,16 +21,16 @@ public final class GameCharacterCatalog implements CharacterCatalog {
             3,
             0,
             List.of(
-                    CardLibrary.BLOOD_ATTACK.id(),
-                    CardLibrary.BLOOD_ATTACK.id(),
-                    CardLibrary.BLOOD_ATTACK.id(),
-                    CardLibrary.BLOOD_ATTACK.id(),
-                    CardLibrary.BLOOD_DEFEND.id(),
-                    CardLibrary.BLOOD_DEFEND.id(),
-                    CardLibrary.BLOOD_DEFEND.id(),
-                    CardLibrary.BLOOD_DEFEND.id(),
-                    CardLibrary.BLOOD_DEVOTION_STRIKE.id(),
-                    CardLibrary.BLOOD_FEAST.id()));
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.STRIKE.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.DEFEND.id(),
+                    CardLibrary.SACRIFICE_STRIKE.id(),
+                    CardLibrary.FEAST.id()));
 
     /**
      * 测试用隐藏角色：不出现在可选列表，选角时输入 {@code god} 解锁。

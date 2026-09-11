@@ -302,7 +302,8 @@ public final class BattleState implements BattleInfo {
             return 0;
         }
         if (toMonster) {
-            int modified = fireRelic(RelicTrigger.DAMAGE_DEALT, amount);
+            int calculated = player.calcDealtDamage(amount);
+            int modified = fireRelic(RelicTrigger.DAMAGE_DEALT, calculated);
             if (modified <= 0) {
                 return 0;
             }
@@ -316,6 +317,9 @@ public final class BattleState implements BattleInfo {
             return hpLoss;
         }
 
+        if (player.hasStatus(StatusEffect.BLOOD_POOL)) {
+            return 0;
+        }
         int incoming = fireRelic(RelicTrigger.DAMAGE_TAKEN, amount);
         if (incoming <= 0) {
             return 0;

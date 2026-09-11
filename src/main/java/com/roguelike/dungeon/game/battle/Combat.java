@@ -7,6 +7,7 @@ import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.StatusEffect;
 import com.roguelike.dungeon.game.entity.Relic;
 import com.roguelike.dungeon.game.entity.RelicTrigger;
 import com.roguelike.dungeon.game.relic.RelicService;
@@ -387,6 +388,11 @@ public class Combat {
             return;
         }
         if (state.getMonsterHp() <= 0) {
+            int herdStacks = state.getMonsterStacks(StatusEffect.BLOOD_HERD);
+            if (herdStacks > 0) {
+                state.getPlayer().increaseMaxHealth(herdStacks);
+                log("血畜触发：最大生命值 +" + herdStacks + "。");
+            }
             state.setFinished(true);
             state.setPlayerTurn(false);
             state.setResultText("胜利：怪物血量已归零。");
@@ -397,6 +403,16 @@ public class Combat {
             fireRelic(RelicTrigger.BATTLE_END, 0);
             eventBus.publishFinished(LevelResult.COMPLETED);
         } else if (state.getPlayer().isDead()) {
+            if (state.getPlayer().hasStatus(StatusEffect.REBORN)) {
+                Player player = state.getPlayer();
+                int newMax = Math.max(1, player.getMaxHealth() / 2);
+                player.reduceMaxHealth(player.getMaxHealth() - newMax);
+                player.healToFull();
+                player.removeStatus(StatusEffect.REBORN);
+                player.addStacks(StatusEffect.WEAK, 99);
+                log("死而复生触发：最大生命值减半，回满生命，并获得 99 层虚弱。");
+                return;
+            }
             state.setFinished(true);
             state.setPlayerTurn(false);
             state.setResultText("失败：玩家血量已归零。");

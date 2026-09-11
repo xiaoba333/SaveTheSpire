@@ -70,6 +70,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
         // 自伤类卡牌不参与默认倍率，避免升级后反而更亏。
         int dealt = state.applyDamage(false, normalizeAmount(amount));
         log("玩家受到 " + dealt + " 点伤害。");
+        player.triggerSelfDamage(dealt);
     }
 
     @Override

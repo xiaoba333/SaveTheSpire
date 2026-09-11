@@ -257,6 +257,9 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         if (amount <= 0) {
             return;
         }
+        if (triggerMaxHealthReduced(amount)) {
+            return;
+        }
         maxHealth = Math.max(1, maxHealth - amount);
         health = Math.min(health, maxHealth);
     }
@@ -293,6 +296,23 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         for (Power power : powers) {
             power.onTurnStart(this);
         }
+    }
+
+    /** 玩家对自己造成实际伤害后，触发相关能力。 */
+    public void triggerSelfDamage(int damage) {
+        for (Power power : powers) {
+            power.onSelfDamage(this, damage);
+        }
+    }
+
+    /** 最大生命值即将下降时询问能力是否接管。 */
+    private boolean triggerMaxHealthReduced(int amount) {
+        for (Power power : powers) {
+            if (power.onMaxHealthReduced(this, amount)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 清空全部能力（每场战斗开始时调用，能力不跨战斗保留）。 */
@@ -336,6 +356,7 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         if (baseDamage <= 0) {
             return 0;
         }
+        baseDamage += getStacks(StatusEffect.STRENGTH);
         if (hasStatus(StatusEffect.WEAK)) {
             return baseDamage * 3 / 4;  // 虚弱：造成的伤害只有 75%
         }
