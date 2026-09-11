@@ -21,8 +21,18 @@ public interface MonsterAi {
     /** 结构化意图，供 HTTP 层序列化；战斗已结束时返回 null。 */
     IntentSnapshot intentInfo(BattleState state);
 
-    /** 战斗开始时重置 AI 内部状态。 */
-    void startFight();
+    /**
+     * 战斗开始时重置 AI 内部状态。
+     *
+     * <p>带 {@link BattleState} 的重载会在开打时调用，脚本怪需要它绑定实体。
+     * 旧的无参版本留给测试木桩。</p>
+     */
+    default void startFight() {
+    }
+
+    default void startFight(BattleState state) {
+        startFight();
+    }
 
     /**
      * 执行一回合怪物行动（攻击玩家 / 给自己叠甲 / 成长等），并翻转下一回合意图。

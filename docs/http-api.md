@@ -264,6 +264,9 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| `GET`  | `/api/v1/characters` | 列出可选角色（不含隐藏角色 god） |
+| `POST` | `/api/v1/runs` | 按角色开一局；可重复调用以重开 |
+| `GET`  | `/api/v1/runs` | 查询当前局阶段和角色状态 |
 | `GET`  | `/api/v1/map` | 拉取整张地图 |
 | `POST` | `/api/v1/map/advance` | 推进节点（战斗类=进入，非战斗类=进入+结算） |
 | `GET`  | `/api/v1/reward` | 拉取当前战斗奖励 |
@@ -302,6 +305,17 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 ### 7.3 请求 / 响应示例
 
 ```jsonc
+// GET /api/v1/characters → CharacterList
+{ "characters": [
+    { "id":"warrior","name":"铁血战士","description":"...","maxHealth":50,"maxEnergy":3,"startingGold":0 },
+    { "id":"blood","name":"血祭者","description":"...","maxHealth":30,"maxEnergy":3,"startingGold":0 }
+] }
+
+// POST /api/v1/runs  请求 { "characterId":"warrior", "seed":12345, "actCount":1 }
+// seed / actCount 可省略。隐藏角色可传 characterId=god。
+// 响应 RunState：
+{ "phase":"MAP", "character": { "name":"铁血战士","hp":50,"maxHp":50,"gold":0,"relics":[] } }
+
 // GET /api/v1/map → MapState
 { "nodes": [ { "id":"0","type":"BATTLE","column":0,"row":0,"state":"SELECTABLE","nextIds":["3"] } ],
   "currentNodeId": "0" }
@@ -329,13 +343,16 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 { "cards": [ /* CardInstance */ ] }
 
 // GET /api/v1/character → CharacterState
-{ "name":"血祭者","hp":10,"maxHp":10,"gold":0,"relics":[] }
+{ "name":"血祭者","hp":30,"maxHp":30,"gold":0,"relics":[] }
 ```
 
 ### 7.4 新增错误码
 
 | code | 含义 |
 |------|------|
+| `NO_ACTIVE_RUN` | 尚未 `POST /runs` 选角开局 |
+| `INVALID_CHARACTER` | characterId 缺失或不存在 |
+| `INVALID_ACT_COUNT` | actCount 小于等于 0 |
 | `NO_ACTIVE_BATTLE` | 未通过地图进入战斗就调用了 `POST /battles` |
 | `INVALID_NODE` | nodeId 非法 / 节点被锁 / 当前阶段不能进入 |
 | `INVALID_CARD` | 奖励选卡时 cardId 不在候选中 |

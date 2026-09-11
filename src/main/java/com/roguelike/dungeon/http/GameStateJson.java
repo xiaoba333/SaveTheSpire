@@ -2,6 +2,7 @@ package com.roguelike.dungeon.http;
 
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
+import com.roguelike.dungeon.game.character.CharacterDefinition;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.entity.Relic;
 import com.roguelike.dungeon.game.map.MapNode;
@@ -26,6 +27,32 @@ public final class GameStateJson {
 
     // ---------- 角色 ----------
 
+    public static String charactersJson(List<CharacterDefinition> characters) {
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"characters\":[");
+        for (int i = 0; i < characters.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            CharacterDefinition character = characters.get(i);
+            sb.append("{\"id\":").append(Json.str(character.id()))
+                    .append(",\"name\":").append(Json.str(character.name()))
+                    .append(",\"description\":").append(Json.str(character.description()))
+                    .append(",\"maxHealth\":").append(character.maxHealth())
+                    .append(",\"maxEnergy\":").append(character.maxEnergy())
+                    .append(",\"startingGold\":").append(character.startingGold())
+                    .append('}');
+        }
+        sb.append("]}");
+        return sb.toString();
+    }
+
+    public static String runJson(String phase, String name, RunState run) {
+        return "{\"phase\":" + Json.str(phase)
+                + ",\"character\":" + characterJson(name, run)
+                + "}";
+    }
+
     public static String characterJson(String name, RunState run) {
         Player player = run.getPlayer();
         StringBuilder sb = new StringBuilder(256);
@@ -41,7 +68,7 @@ public final class GameStateJson {
             }
             Relic relic = relics.get(i);
             // 后端 Relic 没有独立 id，暂用 name 占位；icon 留空等美术资源。
-            sb.append("{\"id\":").append(Json.str(relic.name()))
+            sb.append("{\"id\":").append(Json.str(relic.id()))
               .append(",\"name\":").append(Json.str(relic.name()))
               .append(",\"description\":").append(Json.str(relic.description()))
               .append(",\"icon\":null}");

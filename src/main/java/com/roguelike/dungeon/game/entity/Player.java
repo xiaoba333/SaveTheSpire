@@ -273,12 +273,13 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         health = Math.min(health, maxHealth);
     }
 
-    /** 提高最大生命值；当前生命不随之恢复。amount <= 0 时忽略。 */
+    /** 提高最大生命值，并同步恢复等量当前生命（不超过新上限）。amount <= 0 时忽略。 */
     public void increaseMaxHealth(int amount) {
         if (amount <= 0) {
             return;
         }
         maxHealth += amount;
+        heal(amount);
     }
 
     /** 回满生命到当前最大生命值。 */

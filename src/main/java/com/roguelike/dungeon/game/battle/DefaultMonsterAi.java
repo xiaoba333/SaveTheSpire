@@ -5,7 +5,7 @@ package com.roguelike.dungeon.game.battle;
  *
  * <p>按名字、血量、攻击、叠甲构造，可复现「先攻击、再叠甲」的简单节奏；
  * 也作为卡牌效果测试里的「木桩」使用（attack/block 传 0）。
- * 与 {@link MonsterAiService} 不同，本实现的「下一动是否攻击」状态存在内部。</p>
+ * 「下一动是否攻击」的状态存在内部。</p>
  */
 public final class DefaultMonsterAi implements MonsterAi {
 

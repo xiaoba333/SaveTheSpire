@@ -6,15 +6,16 @@ import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.flow.RunFactory;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
-import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
+import com.roguelike.dungeon.game.character.CharacterDefinition;
 import com.roguelike.dungeon.game.character.GameCharacterCatalog;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
 import com.roguelike.dungeon.game.run.RunState;
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
@@ -41,24 +42,7 @@ public final class GameServer {
 
     private static final String PREFIX_BATTLES = "/api/v1/battles";
 
-    /** 本局随机种子与章节数（MVP 单章节）。 */
-    private static final long RUN_SEED = 20260910L;
-    private static final int TOTAL_ACTS = 1;
-
-    /** 战斗奖励卡池（与 GameFlowDebugMain 的 REWARD_POOL 一致）。 */
-    private static final List<Card> REWARD_POOL = List.of(
-            CardLibrary.BASH,
-            CardLibrary.QUICK_SLASH,
-            CardLibrary.HEAVY_STRIKE,
-            CardLibrary.IRON_WAVE,
-            CardLibrary.SHRUG_IT_OFF,
-            CardLibrary.BLOODLETTING,
-            CardLibrary.BLOOD_BURST,
-            CardLibrary.BLOOD_LORD,
-            CardLibrary.BLOOD_SACRIFICE,
-            CardLibrary.BLOOD_TRANSFUSION,
-            CardLibrary.FEAST,
-            CardLibrary.SACRIFICE_STRIKE);
+    private static final int DEFAULT_ACT_COUNT = 1;
 
     /** 固定商店库存（MVP）。 */
     private static final List<ShopItem> SHOP_ITEMS = List.of(
@@ -72,33 +56,136 @@ public final class GameServer {
                     "从牌组中移除一张卡。", null, null));
 
     private final HttpServer server;
-    private final RunState runState;
-    private final GameController controller;
-    private final String characterName;
+    private final GameCharacterCatalog catalog = new GameCharacterCatalog();
+    private RunState runState;
+    private GameController controller;
+    private String characterName;
     private final Set<String> soldItems = new HashSet<>();
 
     /** 当前进行中的战斗编号；只在 POST /battles 时生成，随战斗结束失效。 */
     private String battleId;
 
     public GameServer(int port) throws IOException {
-        this.runState = RunFactory.createRun(
-                new GameCharacterCatalog(), "blood", RUN_SEED, TOTAL_ACTS);
-        this.characterName = new GameCharacterCatalog().getById("blood").name();
-        this.controller = new GameController(runState, REWARD_POOL, System.out::println);
-
         server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/api/v1/character", this::handleCharacter);
-        server.createContext("/api/v1/deck", this::handleDeck);
-        server.createContext("/api/v1/map", this::handleMap);
-        server.createContext("/api/v1/reward", this::handleReward);
-        server.createContext("/api/v1/shop", this::handleShop);
-        server.createContext("/api/v1/event", this::handleEvent);
-        server.createContext("/api/v1/battles", this::handleBattle);
+        server.createContext("/api/v1/characters", withCors(this::handleCharacters));
+        server.createContext("/api/v1/runs", withCors(this::handleRuns));
+        server.createContext("/api/v1/character", withCors(this::handleCharacter));
+        server.createContext("/api/v1/deck", withCors(this::handleDeck));
+        server.createContext("/api/v1/map", withCors(this::handleMap));
+        server.createContext("/api/v1/reward", withCors(this::handleReward));
+        server.createContext("/api/v1/shop", withCors(this::handleShop));
+        server.createContext("/api/v1/event", withCors(this::handleEvent));
+        server.createContext("/api/v1/battles", withCors(this::handleBattle));
         server.setExecutor(Executors.newSingleThreadExecutor());
     }
 
     public void start() {
         server.start();
+    }
+
+    public int getPort() {
+        return server.getAddress().getPort();
+    }
+
+    public void stop() {
+        server.stop(0);
+    }
+
+    private HttpHandler withCors(HttpHandler next) {
+        return exchange -> {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(204, -1);
+                exchange.close();
+                return;
+            }
+            next.handle(exchange);
+        };
+    }
+
+    private boolean requireRun(HttpExchange ex) throws IOException {
+        if (controller == null || runState == null) {
+            sendError(ex, 400, "NO_ACTIVE_RUN", "尚未选择角色开局");
+            return false;
+        }
+        return true;
+    }
+
+    // ============ 选角 / 开局 ============
+
+    private void handleCharacters(HttpExchange ex) throws IOException {
+        try {
+            if (!"GET".equals(ex.getRequestMethod())) {
+                sendError(ex, 404, "NOT_FOUND", "接口不存在");
+                return;
+            }
+            sendJson(ex, 200, GameStateJson.charactersJson(catalog.getAvailableCharacters()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendError(ex, 500, "INTERNAL_ERROR", "服务器内部错误");
+        }
+    }
+
+    private void handleRuns(HttpExchange ex) throws IOException {
+        try {
+            if ("GET".equals(ex.getRequestMethod())) {
+                if (!requireRun(ex)) {
+                    return;
+                }
+                sendJson(ex, 200, GameStateJson.runJson(
+                        controller.getPhase().name(), characterName, runState));
+                return;
+            }
+            if (!"POST".equals(ex.getRequestMethod())) {
+                sendError(ex, 404, "NOT_FOUND", "接口不存在");
+                return;
+            }
+            startRun(ex);
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendError(ex, 500, "INTERNAL_ERROR", "服务器内部错误");
+        }
+    }
+
+    private void startRun(HttpExchange ex) throws IOException {
+        String body = readBody(ex);
+        String characterId = Json.field(body, "characterId");
+        if (characterId == null || characterId.isBlank()) {
+            sendError(ex, 400, "INVALID_CHARACTER", "缺少 characterId");
+            return;
+        }
+
+        CharacterDefinition character;
+        try {
+            character = catalog.getById(characterId);
+        } catch (IllegalArgumentException exception) {
+            sendError(ex, 400, "INVALID_CHARACTER", exception.getMessage());
+            return;
+        }
+
+        Long seedValue = Json.longField(body, "seed");
+        long seed = seedValue == null
+                ? java.util.concurrent.ThreadLocalRandom.current().nextLong()
+                : seedValue;
+        Long actCountValue = Json.longField(body, "actCount");
+        int actCount = actCountValue == null ? DEFAULT_ACT_COUNT : actCountValue.intValue();
+        if (actCount <= 0) {
+            sendError(ex, 400, "INVALID_ACT_COUNT", "章节数量必须大于 0");
+            return;
+        }
+
+        this.runState = RunFactory.createRun(catalog, character.id(), seed, actCount);
+        this.characterName = character.name();
+        this.controller = new GameController(
+                runState,
+                CardLibrary.rewardPoolFor(character.rewardCardIds()),
+                System.out::println);
+        this.soldItems.clear();
+        this.battleId = null;
+        sendJson(ex, 200, GameStateJson.runJson(
+                controller.getPhase().name(), characterName, runState));
     }
 
     // ============ 角色 / 牌组 ============
@@ -107,6 +194,9 @@ public final class GameServer {
         try {
             if (!"GET".equals(ex.getRequestMethod())) {
                 sendError(ex, 404, "NOT_FOUND", "接口不存在");
+                return;
+            }
+            if (!requireRun(ex)) {
                 return;
             }
             sendJson(ex, 200, GameStateJson.characterJson(characterName, runState));
@@ -122,6 +212,9 @@ public final class GameServer {
                 sendError(ex, 404, "NOT_FOUND", "接口不存在");
                 return;
             }
+            if (!requireRun(ex)) {
+                return;
+            }
             sendJson(ex, 200, GameStateJson.deckJson(runState));
         } catch (Exception e) {
             e.printStackTrace();
@@ -135,6 +228,9 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/map".equals(path) && "GET".equals(ex.getRequestMethod())) {
+                if (!requireRun(ex)) {
+                    return;
+                }
                 sendJson(ex, 200, GameStateJson.mapJson(controller.getMapService()));
                 return;
             }
@@ -150,6 +246,9 @@ public final class GameServer {
     }
 
     private void handleAdvance(HttpExchange ex) throws IOException {
+        if (!requireRun(ex)) {
+            return;
+        }
         String nodeIdRaw = Json.field(readBody(ex), "nodeId");
         if (nodeIdRaw == null) {
             sendError(ex, 400, "INVALID_NODE", "缺少 nodeId");
@@ -189,6 +288,9 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/reward".equals(path) && "GET".equals(ex.getRequestMethod())) {
+                if (!requireRun(ex)) {
+                    return;
+                }
                 sendJson(ex, 200, rewardStateJson());
                 return;
             }
@@ -211,6 +313,9 @@ public final class GameServer {
     }
 
     private void handleSelectReward(HttpExchange ex) throws IOException {
+        if (!requireRun(ex)) {
+            return;
+        }
         String cardId = Json.field(readBody(ex), "cardId"); // null = 跳过
         if (controller.getPhase() != GamePhase.REWARD) {
             // 无待领取奖励（如 Boss 战后）：无操作，返回空奖励
@@ -236,6 +341,9 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/shop".equals(path) && "GET".equals(ex.getRequestMethod())) {
+                if (!requireRun(ex)) {
+                    return;
+                }
                 sendJson(ex, 200, shopStateJson());
                 return;
             }
@@ -255,6 +363,9 @@ public final class GameServer {
     }
 
     private void handleBuy(HttpExchange ex) throws IOException {
+        if (!requireRun(ex)) {
+            return;
+        }
         String itemId = Json.field(readBody(ex), "itemId");
         ShopItem item = SHOP_ITEMS.stream()
                 .filter(it -> it.id().equals(itemId))
@@ -290,6 +401,9 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/event".equals(path) && "GET".equals(ex.getRequestMethod())) {
+                if (!requireRun(ex)) {
+                    return;
+                }
                 sendJson(ex, 200, GameStateJson.eventJson());
                 return;
             }
@@ -305,6 +419,9 @@ public final class GameServer {
     }
 
     private void handleChoose(HttpExchange ex) throws IOException {
+        if (!requireRun(ex)) {
+            return;
+        }
         String choiceId = Json.field(readBody(ex), "choiceId"); // null = 离开
         if (choiceId == null) {
             sendJson(ex, 200, "{}");
@@ -336,6 +453,9 @@ public final class GameServer {
             String method = ex.getRequestMethod();
 
             if (PREFIX_BATTLES.equals(path) && "POST".equals(method)) {
+                if (!requireRun(ex)) {
+                    return;
+                }
                 handleStartBattle(ex);
                 return;
             }
