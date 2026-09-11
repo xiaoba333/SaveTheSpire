@@ -111,13 +111,15 @@ public final class CardLibrary {
             CardType.SKILL,
             0,
             "失去 3 点生命，获得 2 点能量。",
+            "失去 3 点生命，获得 3 点能量。",
             context -> {
                 context.dealDamageToPlayer(3);
                 context.addPlayerEnergy(context.isUpgraded() ? 3 : 2);
             },
             false,
             true,
-            true);
+            true,
+            CardRarity.UNCOMMON);
 
     /**
      * 暴血：自伤 1，获得护甲。普通 9，升级 12。
@@ -153,7 +155,8 @@ public final class CardLibrary {
             },
             false,
             true,
-            true);
+            true,
+            CardRarity.RARE);
 
     /**
      * 血祭：降低最大生命值，获得能量并抽牌。
@@ -172,7 +175,8 @@ public final class CardLibrary {
             },
             false,
             true,
-            true);
+            true,
+            CardRarity.UNCOMMON);
 
     /**
      * 鲜血转换：自伤并抽牌。
@@ -250,7 +254,8 @@ public final class CardLibrary {
             context -> context.gainPower(new BloodHappinessPower()),
             false,
             true,
-            true);
+            true,
+            CardRarity.RARE);
 
     public static final Card BLOOD_LACERATION = new Card(
             "blood_laceration",
@@ -281,7 +286,8 @@ public final class CardLibrary {
                     new TearPower(context.isUpgraded() ? 2 : 1)),
             false,
             true,
-            true);
+            true,
+            CardRarity.UNCOMMON);
 
     public static final Card CRIMSON_POOL = new Card(
             "crimson_pool",
@@ -298,7 +304,8 @@ public final class CardLibrary {
             },
             false,
             true,
-            true);
+            true,
+            CardRarity.RARE);
 
     public static final Card BLOOD_STRIP = new Card(
             "blood_strip",
@@ -330,7 +337,8 @@ public final class CardLibrary {
             },
             false,
             true,
-            true);
+            true,
+            CardRarity.UNCOMMON);
 
     public static final Card BLOOD_REBIRTH = new Card(
             "blood_rebirth",
@@ -342,7 +350,8 @@ public final class CardLibrary {
             context -> { },
             false,
             true,
-            true);
+            true,
+            CardRarity.RARE);
 
     public static final Card BLOOD_RAIN = new Card(
             "blood_rain",
@@ -379,7 +388,8 @@ public final class CardLibrary {
             },
             false,
             true,
-            true);
+            true,
+            CardRarity.RARE);
 
     /**
      * 锻造：升级玩家选中的一张手牌。

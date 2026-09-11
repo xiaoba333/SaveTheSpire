@@ -86,7 +86,7 @@ public final class BattleStateJson {
                 + ",\"description\":" + Json.str(instance.displayDescription())
                 + ",\"exhausts\":" + card.exhausts()
                 + ",\"playable\":" + card.playable()
-                + ",\"rarity\":" + Json.str(DEFAULT_RARITY)
+                + ",\"rarity\":" + Json.str(card.rarity().name())
                 + "}";
     }
 
