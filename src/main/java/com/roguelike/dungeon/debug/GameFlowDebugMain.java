@@ -38,19 +38,6 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public final class GameFlowDebugMain {
     private static final int DEFAULT_ACT_COUNT = 1;
-    private static final List<Card> REWARD_POOL = List.of(
-            CardLibrary.BASH,
-            CardLibrary.QUICK_SLASH,
-            CardLibrary.HEAVY_STRIKE,
-            CardLibrary.IRON_WAVE,
-            CardLibrary.SHRUG_IT_OFF,
-            CardLibrary.BLOODLETTING,
-            CardLibrary.BLOOD_BURST,
-            CardLibrary.BLOOD_LORD,
-            CardLibrary.BLOOD_SACRIFICE,
-            CardLibrary.BLOOD_TRANSFUSION,
-            CardLibrary.FEAST,
-            CardLibrary.SACRIFICE_STRIKE);
 
     private final Scanner scanner;
     private final GameController controller;
@@ -86,7 +73,7 @@ public final class GameFlowDebugMain {
 
                 GameController controller = new GameController(
                         runState,
-                        REWARD_POOL,
+                        CardLibrary.rewardPoolFor(character.rewardCardIds()),
                         line -> System.out.println("[战斗] " + line));
                 new GameFlowDebugMain(scanner, controller).run();
             }
@@ -135,9 +122,7 @@ public final class GameFlowDebugMain {
 
                 case EVENT -> handleEvent();
                 case REST -> handleCampfire();
-               
                 case SHOP -> handleShop();
-            
                 case VICTORY -> {
                     printRunSummary("恭喜通关！");
                     running = false;

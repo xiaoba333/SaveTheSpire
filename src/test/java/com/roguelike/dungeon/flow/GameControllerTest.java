@@ -6,6 +6,7 @@ import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.campfire.CampfireActionStatus;
+import com.roguelike.dungeon.game.entity.BattleEndHealRelic;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.event.EventActionStatus;
 import com.roguelike.dungeon.game.event.EventChoice;
@@ -66,6 +67,29 @@ class GameControllerTest {
         assertEquals(25, runState.getGold());
         assertTrue(controller.getCurrentReward().isEmpty());
         assertTrue(controller.getMapService().getCompletedNodeIds().contains(node.id()));
+    }
+
+    @Test
+    void battleVictoryShouldHealFromBurningBloodRelic() {
+        Player player = new Player(50, 3);
+        player.setHealth(20);
+        player.addRelic(new BattleEndHealRelic());
+        RunState runState = new RunState(
+                player,
+                List.of(new CardInstance("strike-1", CardLibrary.STRIKE)),
+                0,
+                12345L,
+                1);
+        GameController controller = new GameController(runState, List.of(), line -> { });
+        MapNode node = controller.getMapService().getAvailableNodes().getFirst();
+
+        controller.selectNode(node.id());
+        assertEquals(GamePhase.BATTLE, controller.getPhase());
+
+        controller.onLevelFinished(LevelResult.COMPLETED);
+
+        assertEquals(26, player.getHealth());
+        assertEquals(GamePhase.REWARD, controller.getPhase());
     }
 
     @Test

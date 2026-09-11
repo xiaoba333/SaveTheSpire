@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RunFactoryTest {
 
@@ -21,6 +22,28 @@ class RunFactoryTest {
         assertEquals(0, runState.getGold());
         assertEquals(10, runState.getDeck().size());
         assertEquals(12345L, runState.getRunSeed());
+        assertTrue(runState.getPlayer().getRelics().isEmpty());
+        assertEquals("feast", runState.getDeck().stream()
+                .map(card -> card.card().id())
+                .filter(id -> id.equals("feast") || id.equals("blood_feast"))
+                .findFirst()
+                .orElseThrow());
+    }
+
+    @Test
+    void createRunShouldBuildWarriorWithBurningBloodAndStartingDeck() {
+        RunState runState = RunFactory.createRun(catalog, "warrior", 12345L, 1);
+
+        assertEquals(50, runState.getPlayer().getMaxHealth());
+        assertEquals(9, runState.getDeck().size());
+        assertEquals(4, runState.getDeck().stream()
+                .filter(card -> card.card().id().equals("strike")).count());
+        assertEquals(4, runState.getDeck().stream()
+                .filter(card -> card.card().id().equals("defend")).count());
+        assertEquals(1, runState.getDeck().stream()
+                .filter(card -> card.card().id().equals("bash")).count());
+        assertEquals(1, runState.getPlayer().getRelics().size());
+        assertEquals("燃烧之血", runState.getPlayer().getRelics().getFirst().name());
     }
 
     @Test
@@ -34,6 +57,7 @@ class RunFactoryTest {
         RunState runState = RunFactory.createRun(catalog, "god", 12345L, 1);
 
         assertEquals(50, runState.getPlayer().getMaxHealth());
+        assertEquals(999, runState.getGold());
         assertEquals(1, runState.getDeck().size());
         assertEquals("descend", runState.getDeck().getFirst().card().id());
         assertEquals("降神", runState.getDeck().getFirst().card().name());

@@ -252,6 +252,15 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         }
     }
 
+    /**
+     * 战斗胜利结束时结算所有遗物效果（由 GameController 调用）。
+     */
+    public void onBattleEnd() {
+        for (Relic relic : relics) {
+            relic.onBattleEnd(this);
+        }
+    }
+
     /** 降低最大生命值（下限 1 点），并把当前生命夹到新上限内。 */
     public void reduceMaxHealth(int amount) {
         if (amount <= 0) {

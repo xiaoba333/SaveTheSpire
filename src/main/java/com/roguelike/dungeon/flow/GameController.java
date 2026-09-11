@@ -168,9 +168,9 @@ public final class GameController implements LevelFinishHandler {
 
         switch (node.type()) {
             case BATTLE, ELITE, BOSS -> startBattle();
-case EVENT -> startEvent(node);
-case SHOP -> startShop(node);
-case REST -> startCampfire();
+            case EVENT -> startEvent(node);
+            case SHOP -> startShop(node);
+            case REST -> startCampfire();
         }
         return node;
     }
@@ -298,6 +298,8 @@ case REST -> startCampfire();
             return;
         }
 
+        runState.getPlayer().onBattleEnd();
+
         MapNode node = requireCurrentNode();
         if (node.type() == MapNodeType.BOSS) {
             currentCombat = null;
@@ -370,13 +372,13 @@ case REST -> startCampfire();
         return seed * 31 + node.id();
     }
 
-private long eventSeed(MapNode node) {
-    return rewardSeed(node) ^ 0xC64A7935BD1E995L;
-}
+    private long eventSeed(MapNode node) {
+        return rewardSeed(node) ^ 0xC64A7935BD1E995L;
+    }
 
-private long shopSeed(MapNode node) {
-    return rewardSeed(node) ^ 0x5DEECE66DL;
-}
+    private long shopSeed(MapNode node) {
+        return rewardSeed(node) ^ 0x5DEECE66DL;
+    }
 
     private void requirePhase(GamePhase expected) {
         if (phase != expected) {
