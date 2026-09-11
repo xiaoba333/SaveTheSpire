@@ -14,10 +14,14 @@ import com.roguelike.dungeon.game.event.EventCatalog;
 import com.roguelike.dungeon.game.event.EventChoice;
 import com.roguelike.dungeon.game.event.EventChoiceResult;
 import com.roguelike.dungeon.game.event.EventService;
+import com.roguelike.dungeon.game.entity.Relic;
+import com.roguelike.dungeon.game.entity.RelicRarity;
 import com.roguelike.dungeon.game.event.GameEvent;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
 import com.roguelike.dungeon.game.map.MapService;
+import com.roguelike.dungeon.game.relic.RelicLibrary;
+import com.roguelike.dungeon.game.relic.RelicService;
 import com.roguelike.dungeon.game.reward.BattleReward;
 import com.roguelike.dungeon.game.reward.RewardService;
 import com.roguelike.dungeon.game.run.RunState;
@@ -43,6 +47,8 @@ public final class GameController implements LevelFinishHandler {
     private final RunState runState;
     private final List<Card> rewardPool;
     private final Consumer<String> combatLogger;
+    /** 本局共享的遗物分发器：开局发放初始遗物，战斗与奖励都通过它结算。 */
+    private final RelicService relicService;
 
     private GamePhase phase = GamePhase.MAP;
     private Combat currentCombat;
@@ -62,6 +68,31 @@ public final class GameController implements LevelFinishHandler {
                 card, "奖励卡池不能包含 null"));
         this.combatLogger = Objects.requireNonNull(
                 combatLogger, "战斗日志处理器不能为 null");
+        this.relicService = new RelicService(
+                this.runState.getPlayer(), this.combatLogger);
+        grantStartingRelics();
+    }
+
+    /**
+     * 开局发放初始遗物。
+     *
+     * <p>每个遗物都是纯增益，目的是让开局有稳定战力，
+     * 避免「一件遗物都没有、被怪物两下打死」的体验。</p>
+     */
+    private void grantStartingRelics() {
+        for (Relic relic : RelicLibrary.createStarting()) {
+            relicService.acquire(relic);
+        }
+    }
+
+    /** 本局共享的遗物分发器，供界面或测试查询玩家持有的遗物。 */
+    public RelicService getRelicService() {
+        return relicService;
+    }
+
+    /** 玩家当前持有的遗物，按获得顺序。 */
+    public List<Relic> getRelics() {
+        return relicService.relics();
     }
 
     public GamePhase getPhase() {
@@ -224,7 +255,8 @@ public final class GameController implements LevelFinishHandler {
                 combatLogger,
                 this,
                 runState::upgradeCard,
-                pickMonster(node));
+                pickMonster(node),
+                relicService);
     }
 
     private void startEvent(MapNode node) {
@@ -292,9 +324,23 @@ public final class GameController implements LevelFinishHandler {
                 runState,
                 rewardPool,
                 rewardSeed(node),
-                gold);
+                gold,
+                relicService,
+                relicRaritiesFor(node.type()));
         currentCombat = null;
         phase = GamePhase.REWARD;
+    }
+
+    /**
+     * 不同节点掉落的遗物稀有度。
+     *
+     * <p>普通战斗只掉普通 / 罕见，精英能掉稀有，避免开局就滚出太强的遗物。</p>
+     */
+    private static RelicRarity[] relicRaritiesFor(MapNodeType nodeType) {
+        return nodeType == MapNodeType.ELITE
+                ? new RelicRarity[]{
+                        RelicRarity.COMMON, RelicRarity.UNCOMMON, RelicRarity.RARE}
+                : new RelicRarity[]{RelicRarity.COMMON, RelicRarity.UNCOMMON};
     }
 
     private void finishNonBattleLevel(LevelResult result) {
