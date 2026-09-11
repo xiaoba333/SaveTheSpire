@@ -11,7 +11,7 @@ public final class GameCharacterCatalog implements CharacterCatalog {
 
     /**
      * 「血祭者」：初始血量 10，起始遗物「血之代价」（遗物属于后续扩展，见契约第 10 节）。
-     * 起始牌组：4 攻击 + 4 防御 + 献身打击 + 狂宴（共 10 张）。
+     * 起始牌组：4 攻击 + 4 防御 + 御血术 + 狂宴（共 10 张）。
      */
     public static final CharacterDefinition BLOOD_PRICE_CHARACTER = new CharacterDefinition(
             "blood",
@@ -32,6 +32,19 @@ public final class GameCharacterCatalog implements CharacterCatalog {
                     CardLibrary.BLOOD_DEVOTION_STRIKE.id(),
                     CardLibrary.BLOOD_FEAST.id()));
 
+    /**
+     * 测试用隐藏角色：不出现在可选列表，选角时输入 {@code god} 解锁。
+     * 起始牌组只有一张「降神」。
+     */
+    public static final CharacterDefinition GOD_CHARACTER = new CharacterDefinition(
+            "god",
+            "god",
+            "测试角色，牌组只有一张降神。",
+            50,
+            3,
+            0,
+            List.of(CardLibrary.DESCEND.id()));
+
     private static final List<CharacterDefinition> CHARACTERS =
             List.of(BLOOD_PRICE_CHARACTER);
 
@@ -44,6 +57,9 @@ public final class GameCharacterCatalog implements CharacterCatalog {
     public CharacterDefinition getById(String characterId) {
         if (characterId == null) {
             throw new IllegalArgumentException("角色编号不能为 null");
+        }
+        if (GOD_CHARACTER.id().equals(characterId)) {
+            return GOD_CHARACTER;
         }
         return CHARACTERS.stream()
                 .filter(character -> character.id().equals(characterId))

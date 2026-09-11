@@ -100,7 +100,7 @@ class CardPlayServiceTest {
     }
 
     @Test
-    void sacrificeStrikeShouldDealCurrentHealthAndHurtPlayer() {
+    void hemokinesisShouldHurtPlayerThenDealTwelveToMonster() {
         BattleState state = readyStateForCards(
                 List.of(new CardInstance(
                         "sacrifice-1", CardLibrary.SACRIFICE_STRIKE)), 3);
@@ -114,8 +114,8 @@ class CardPlayServiceTest {
 
         assertEquals(PlayCardResult.SUCCESS, service.play(state, sacrificeId));
 
-        assertEquals(17, state.getPlayer().getHealth());
-        assertEquals(10, state.getMonsterHp());
+        assertEquals(18, state.getPlayer().getHealth());
+        assertEquals(18, state.getMonsterHp());
     }
 
     @Test

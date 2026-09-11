@@ -28,4 +28,14 @@ class RunFactoryTest {
         assertThrows(IllegalArgumentException.class,
                 () -> RunFactory.createRun(catalog, "unknown", 12345L, 1));
     }
+
+    @Test
+    void createRunShouldBuildGodCharacterWithSingleDescendCard() {
+        RunState runState = RunFactory.createRun(catalog, "god", 12345L, 1);
+
+        assertEquals(50, runState.getPlayer().getMaxHealth());
+        assertEquals(1, runState.getDeck().size());
+        assertEquals("descend", runState.getDeck().getFirst().card().id());
+        assertEquals("降神", runState.getDeck().getFirst().card().name());
+    }
 }

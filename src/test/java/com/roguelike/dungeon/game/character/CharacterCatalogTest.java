@@ -51,4 +51,18 @@ class CharacterCatalogTest {
 
         assertTrue(exception.getMessage().contains("nonexistent"));
     }
+
+    @Test
+    void hiddenGodCharacterIsUnlockableByIdButNotListed() {
+        List<CharacterDefinition> characters = catalog.getAvailableCharacters();
+        assertTrue(characters.stream().noneMatch(character -> "god".equals(character.id())));
+
+        CharacterDefinition god = catalog.getById("god");
+        assertEquals("god", god.id());
+        assertEquals("god", god.name());
+        assertEquals(List.of(CardLibrary.DESCEND.id()), god.startingCardIds());
+        assertEquals("descend", CardLibrary.byId(god.startingCardIds().getFirst()).id());
+        assertEquals("降神", CardLibrary.DESCEND.name());
+        assertEquals(1, CardLibrary.DESCEND.cost());
+    }
 }
