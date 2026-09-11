@@ -48,7 +48,7 @@ class CardEffectTest {
     }
 
     @Test
-    void devotionStrikeDealsCurrentHpAndLosesHp() {
+    void hemokinesisDealsTwoToSelfAndTwelveToMonster() {
         Player player = new Player(20, 3);
         player.setHealth(12);
         List<CardInstance> deck = List.of(new CardInstance("d1", CardLibrary.BLOOD_DEVOTION_STRIKE));
@@ -57,7 +57,22 @@ class CardEffectTest {
         combat.playCard(0);
 
         assertEquals(100 - 12, combat.getMonsterHp());
-        assertEquals(9, combat.getPlayerHp());
+        assertEquals(10, combat.getPlayerHp());
+    }
+
+    @Test
+    void upgradedHemokinesisDealsTwoToSelfAndSixteenToMonster() {
+        CardInstance upgraded = new CardInstance("d1", CardLibrary.BLOOD_DEVOTION_STRIKE, true);
+        assertEquals(1, upgraded.effectiveCost());
+        Player player = new Player(20, 3);
+        player.setHealth(12);
+        Combat combat = combatWith(
+                player, List.of(upgraded), new DefaultMonsterAi("木桩", 100, 0, 0));
+
+        combat.playCard(0);
+
+        assertEquals(100 - 16, combat.getMonsterHp());
+        assertEquals(10, combat.getPlayerHp());
     }
 
     @Test
@@ -71,5 +86,20 @@ class CardEffectTest {
         combat.playCard(0);
 
         assertEquals(100 - 9, combat.getMonsterHp());
+    }
+
+    @Test
+    void descendDealsNineHundredNinetyNine() {
+        Player player = new Player(50, 3);
+        Combat combat = combatWith(
+                player,
+                List.of(new CardInstance("g1", CardLibrary.DESCEND)),
+                new DefaultMonsterAi("木桩", 100, 0, 0));
+
+        combat.playCard(0);
+
+        assertEquals(0, combat.getMonsterHp());
+        assertTrue(combat.isFinished());
+        assertEquals("VICTORY", combat.getResult());
     }
 }

@@ -213,20 +213,20 @@ public final class CardLibrary {
             true);
 
     /**
-     * 献身打击：造成等于玩家当前生命值的伤害，并损失自身生命。
+     * 御血术：先对自己造成 2 点伤害，再对指定敌人造成伤害。
      *
-     * <p>普通版：损失 3 点生命；升级版：损失 1 点生命。</p>
+     * <p>普通版：对敌人 12 点；升级版：对敌人 16 点。自伤始终为 2 点。</p>
      */
     public static final Card SACRIFICE_STRIKE = new Card(
             "sacrifice_strike",
-            "献身打击",
+            "御血术",
             CardType.ATTACK,
             1,
-            "造成等于当前生命值的伤害，自己失去 3 点生命；升级后自己失去 1 点生命。",
-            "对一名敌人造成等于当前生命值的伤害，自己失去 1 点生命。",
+            "对自己造成 2 点伤害，对指定敌人造成 12 点伤害；升级后造成 16 点伤害。",
+            "对自己造成 2 点伤害，对指定敌人造成 16 点伤害。",
             context -> {
-                context.dealDamageToMonster(context.getPlayerHealth());
-                context.dealDamageToPlayer(context.isUpgraded() ? 1 : 3);
+                context.dealDamageToPlayer(2);
+                context.dealDamageToMonster(context.isUpgraded() ? 16 : 12);
             },
             false,
             true,
@@ -431,14 +431,14 @@ public final class CardLibrary {
 
     public static final Card BLOOD_DEVOTION_STRIKE = new Card(
             "blood_devotion",
-            "献身打击",
+            "御血术",
             CardType.ATTACK,
             1,
-            "造成等于当前生命值的伤害，自己失去 3 点生命；升级后自己失去 1 点生命。",
-            "造成等于当前生命值的伤害，自己失去 1 点生命。",
+            "对自己造成 2 点伤害，对指定敌人造成 12 点伤害；升级后造成 16 点伤害。",
+            "对自己造成 2 点伤害，对指定敌人造成 16 点伤害。",
             context -> {
-                context.dealDamageToMonster(context.getPlayerHealth());
-                context.dealDamageToPlayer(context.isUpgraded() ? 1 : 3);
+                context.dealDamageToPlayer(2);
+                context.dealDamageToMonster(context.isUpgraded() ? 16 : 12);
             },
             false,
             true,
@@ -457,6 +457,18 @@ public final class CardLibrary {
             true,
             true,
             true);
+
+    /** 测试用隐藏角色「god」的专属牌：1 费造成 999 点伤害。 */
+    public static final Card DESCEND = new Card(
+            "descend",
+            "降神",
+            CardType.ATTACK,
+            1,
+            "造成 999 点伤害。",
+            context -> context.dealDamageToMonster(999),
+            false,
+            true,
+            false);
 
     private static final Map<String, Card> CARDS = Map.ofEntries(
             Map.entry(STRIKE.id(), STRIKE),
@@ -487,12 +499,13 @@ public final class CardLibrary {
             Map.entry(BLOOD_DEFEND.id(), BLOOD_DEFEND),
             Map.entry(BLOOD_FEAST.id(), BLOOD_FEAST),
             Map.entry(BLOOD_DEVOTION_STRIKE.id(), BLOOD_DEVOTION_STRIKE),
-            Map.entry(BLOOD_METALLICIZE.id(), BLOOD_METALLICIZE));
+            Map.entry(BLOOD_METALLICIZE.id(), BLOOD_METALLICIZE),
+            Map.entry(DESCEND.id(), DESCEND));
 
     private CardLibrary() {
     }
 
-    /** 创建血之领主初始牌组：4 打击、4 防御、1 狂宴、1 献身打击。 */
+    /** 创建血之领主初始牌组：4 打击、4 防御、1 狂宴、1 御血术。 */
     public static List<Card> startingDeck() {
         return List.of(
                 STRIKE, STRIKE, STRIKE, STRIKE,
