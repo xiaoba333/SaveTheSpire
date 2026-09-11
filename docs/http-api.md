@@ -253,3 +253,95 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 6. **账号/多人**：MVP 无登录；后端生成 `battleId`，Unity 存内存或 PlayerPrefs；当前一台机器一个战斗实例。
 7. **战斗过期**：MVP 只存后端内存，重启失效；开发期设置 **30 分钟无操作清理**。
 8. **数值**：防御牌 **5 点护甲**（以 `CardLibrary` 代码和卡牌文档为准，旧 README 的 6 是早期版本）。
+
+---
+
+## 7. 非战斗接口（map / reward / shop / event / deck / character）
+
+> 后端已从「独立战斗服务（`BattleServer`）」升级为「统一游戏服务（`GameServer`）」：一个进程承载一整局
+> 权威状态（`RunState` + `GameController`），把下面 10 个非战斗端点与第 4 节的 4 个战斗端点接到真实逻辑上。
+> 前端把 `GameSettings.UseHttpBackend` 置 `true` 即可走完整流程：菜单 → 地图 → 战斗 → 奖励 → 商店/事件 → 牌组/角色。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET`  | `/api/v1/map` | 拉取整张地图 |
+| `POST` | `/api/v1/map/advance` | 推进节点（战斗类=进入，非战斗类=进入+结算） |
+| `GET`  | `/api/v1/reward` | 拉取当前战斗奖励 |
+| `POST` | `/api/v1/reward/select` | 选择一张奖励卡（cardId=null 表示跳过） |
+| `GET`  | `/api/v1/shop` | 拉取商店状态 |
+| `POST` | `/api/v1/shop/buy` | 购买一件商品 |
+| `GET`  | `/api/v1/event` | 拉取当前事件 |
+| `POST` | `/api/v1/event/choose` | 结算事件选项（choiceId=null 表示离开） |
+| `GET`  | `/api/v1/deck` | 拉取当前牌组 |
+| `GET`  | `/api/v1/character` | 拉取角色状态 |
+
+### 7.1 地图推进语义（关键）
+
+前端 `map.Advance(nodeId)` 在不同节点类型下语义不同：
+
+- **BATTLE / ELITE / BOSS**：`advance` 即「进入节点」，后端 `selectNode` 立即启动战斗；随后前端再调 `POST /battles` 取当前战斗。
+- **EVENT / SHOP / REST**：`advance` 只在结算后调用一次，后端按「进入 + 完成」一次性结算并回到地图阶段。
+
+节点 `id` 为**数字字符串**（如 `"0"`），`type` 用大写（`BATTLE/ELITE/EVENT/SHOP/REST/BOSS`），
+`state` 为 `LOCKED/SELECTABLE/CURRENT/PASSED`，`column`=层（0 在下、Boss 在最上）、`row`=同层横向位置。
+
+### 7.2 非战斗卡牌 JSON（与 3.3 手牌卡的差异）
+
+非战斗卡牌不带 `effectiveCost/upgraded/upgradable`，但带 `color`（后端未下发时前端默认 `red`）：
+
+```json
+{ "id": "quick_slash", "definitionId": "quick_slash", "name": "快斩",
+  "type": "ATTACK", "cost": 0, "description": "造成 3 点伤害。",
+  "exhausts": false, "playable": true, "rarity": "COMMON", "color": "red" }
+```
+
+- 奖励候选卡的 `id` = `definitionId`（前端选卡时回传该 `id`，后端据此匹配）。
+- 牌组卡的 `id` = 实例唯一 id（UUID）。
+- `rarity`：牌组统一 `BASIC`、奖励候选 `COMMON`、商店商品按商品定义；后端 `Card` 暂无稀有度字段，属占位。
+
+### 7.3 请求 / 响应示例
+
+```jsonc
+// GET /api/v1/map → MapState
+{ "nodes": [ { "id":"0","type":"BATTLE","column":0,"row":0,"state":"SELECTABLE","nextIds":["3"] } ],
+  "currentNodeId": "0" }
+
+// POST /api/v1/map/advance  请求 { "nodeId": "0" }  → MapState
+
+// GET /api/v1/reward → RewardState
+{ "gold": 20, "cardChoices": [ /* CardInstance */ ] }
+
+// POST /api/v1/reward/select  请求 { "cardId": "quick_slash" }（null=跳过） → RewardState（选完返回空）
+
+// GET /api/v1/shop → ShopState
+{ "gold": 20, "items": [ { "id":"c_strike","name":"打击","kind":"CARD","price":45,
+  "description":"造成 6 点伤害。","rarity":"COMMON","sold":false } ] }
+
+// POST /api/v1/shop/buy  请求 { "itemId": "c_strike" }  → ShopState
+
+// GET /api/v1/event → EventState
+{ "id":"broken_statue","title":"破损的雕像","description":"...",
+  "choices":[ { "id":"pray","label":"虔诚祈祷（恢复 5 点生命）","disabled":false } ] }
+
+// POST /api/v1/event/choose  请求 { "choiceId": "pray" }（null=离开） → {}
+
+// GET /api/v1/deck → DeckState
+{ "cards": [ /* CardInstance */ ] }
+
+// GET /api/v1/character → CharacterState
+{ "name":"血祭者","hp":10,"maxHp":10,"gold":0,"relics":[] }
+```
+
+### 7.4 新增错误码
+
+| code | 含义 |
+|------|------|
+| `NO_ACTIVE_BATTLE` | 未通过地图进入战斗就调用了 `POST /battles` |
+| `INVALID_NODE` | nodeId 非法 / 节点被锁 / 当前阶段不能进入 |
+| `INVALID_CARD` | 奖励选卡时 cardId 不在候选中 |
+| `INVALID_ITEM` | 商店商品不存在 |
+| `ITEM_SOLD` | 商品已售出 |
+| `NOT_ENOUGH_GOLD` | 金币不足 |
+
+> MVP 已知限制：战斗失败（DEFEAT）后流程进入终局、无重试；Boss 胜利后无胜利界面（地图走完）；
+> 休息回 30% 最大生命；商店「移除一张卡」为占位、暂未结算；奖励金币为战斗 20 / 精英 35。

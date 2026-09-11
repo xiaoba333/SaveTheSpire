@@ -451,7 +451,6 @@ public final class CardLibrary {
             Map.entry(BLOOD_REBIRTH.id(), BLOOD_REBIRTH),
             Map.entry(BLOOD_RAIN.id(), BLOOD_RAIN),
             Map.entry(DUSK_VEIL.id(), DUSK_VEIL),
-            Map.entry(FORGE.id(), FORGE));
             Map.entry(FORGE.id(), FORGE),
             Map.entry(BLOOD_ATTACK.id(), BLOOD_ATTACK),
             Map.entry(BLOOD_DEFEND.id(), BLOOD_DEFEND),
