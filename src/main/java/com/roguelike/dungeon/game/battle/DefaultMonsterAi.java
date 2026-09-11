@@ -70,7 +70,7 @@ public final class DefaultMonsterAi implements MonsterAi {
         state.setPlayerTurn(false);
         state.setMonsterBlock(0);
         if (willAttack) {
-            int dealt = state.applyDamage(false, attack);
+            int dealt = state.monsterAttackPlayer(attack);
             willAttack = false;
             return MonsterTurnResult.attack(dealt);
         }

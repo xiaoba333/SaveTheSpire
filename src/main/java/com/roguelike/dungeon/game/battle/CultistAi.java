@@ -45,7 +45,7 @@ public final class CultistAi implements MonsterAi {
     public MonsterTurnResult takeTurn(BattleState state) {
         state.setPlayerTurn(false);
         state.setMonsterBlock(0);
-        int dealt = state.applyDamage(false, attackDamage);
+        int dealt = state.monsterAttackPlayer(attackDamage);
         attackDamage += RITUAL_GAIN;
         return MonsterTurnResult.attack(dealt);
     }

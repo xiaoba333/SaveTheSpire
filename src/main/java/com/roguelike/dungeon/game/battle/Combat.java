@@ -315,11 +315,7 @@ public class Combat {
         }
 
         MonsterAi.MonsterTurnResult monsterResult = monsterAi.takeTurn(state);
-        if (monsterResult.attacked()) {
-            log(monsterAi.name() + "攻击，对玩家造成 " + monsterResult.value() + " 点伤害。");
-        } else {
-            log(monsterAi.name() + "防御，获得 " + monsterResult.value() + " 点护盾。");
-        }
+        log(monsterAi.name() + monsterResult.text());
         checkFinished();
         if (state.isFinished()) {
             return;

@@ -59,8 +59,8 @@ public final class JawWormAi implements MonsterAi {
                 state.addMonsterBlock(CURL_BLOCK);
                 yield MonsterTurnResult.defend(CURL_BLOCK);
             }
-            case 1 -> MonsterTurnResult.attack(state.applyDamage(false, BITE));
-            default -> MonsterTurnResult.attack(state.applyDamage(false, HEAVY_BITE));
+            case 1 -> MonsterTurnResult.attack(state.monsterAttackPlayer(BITE));
+            default -> MonsterTurnResult.attack(state.monsterAttackPlayer(HEAVY_BITE));
         };
         step++;
         return result;

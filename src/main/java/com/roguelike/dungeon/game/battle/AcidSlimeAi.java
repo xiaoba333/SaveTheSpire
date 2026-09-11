@@ -41,7 +41,7 @@ public final class AcidSlimeAi implements MonsterAi {
     public MonsterTurnResult takeTurn(BattleState state) {
         state.setPlayerTurn(false);
         state.setMonsterBlock(0);
-        int dealt = state.applyDamage(false, ATTACK);
+        int dealt = state.monsterAttackPlayer(ATTACK);
         return MonsterTurnResult.attack(dealt);
     }
 }

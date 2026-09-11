@@ -3,7 +3,6 @@ package com.roguelike.dungeon.flow;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.CombatFactory;
 import com.roguelike.dungeon.game.battle.MonsterAi;
-import com.roguelike.dungeon.game.battle.MonsterAiService;
 import com.roguelike.dungeon.game.battle.MonsterCatalog;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
@@ -276,8 +275,8 @@ case REST -> startCampfire();
     private MonsterAi pickMonster(MapNode node) {
         return switch (node.type()) {
             case BATTLE -> MonsterCatalog.randomEasy(rewardSeed(node));
-            case ELITE -> MonsterAiService.regular();
-            case BOSS -> MonsterAiService.boss();
+            case ELITE -> MonsterCatalog.randomElite(rewardSeed(node));
+            case BOSS -> MonsterCatalog.randomBoss(rewardSeed(node));
             default -> throw new IllegalStateException(
                     "非战斗节点无法选取怪物: " + node.type());
         };

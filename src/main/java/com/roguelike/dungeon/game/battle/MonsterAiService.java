@@ -76,7 +76,7 @@ public final class MonsterAiService implements MonsterAi {
         state.setMonsterBlock(0);
 
         if (state.isMonsterWillAttack()) {
-            int dealt = state.applyDamage(false, attackDamage);
+            int dealt = state.monsterAttackPlayer(attackDamage);
             state.setMonsterWillAttack(false);
             return MonsterTurnResult.attack(dealt);
         }

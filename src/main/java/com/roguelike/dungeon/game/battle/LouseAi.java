@@ -54,7 +54,7 @@ public final class LouseAi implements MonsterAi {
             step++;
             return MonsterTurnResult.defend(CURL_BLOCK);
         }
-        int dealt = state.applyDamage(false, BITE);
+        int dealt = state.monsterAttackPlayer(BITE);
         step++;
         return MonsterTurnResult.attack(dealt);
     }

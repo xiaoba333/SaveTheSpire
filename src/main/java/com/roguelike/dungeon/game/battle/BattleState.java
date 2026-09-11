@@ -324,6 +324,47 @@ public final class BattleState implements BattleInfo {
     }
 
     /**
+     * 怪物攻击玩家：先结算怪物自身的力量与虚弱，再走统一的受伤流程。
+     *
+     * <p>最终伤害 = 招式基础值 + 力量层数，若怪物处于虚弱状态则再打 75% 折扣。
+     * 之所以不在 {@link #applyDamage(boolean, int)} 里做这层修正，是因为该方法是
+     * 双向共用的，自伤类卡牌也会走它，不该被怪物的状态影响。</p>
+     *
+     * @param baseDamage 招式的原始伤害
+     * @return 玩家实际损失的生命
+     */
+    public int monsterAttackPlayer(int baseDamage) {
+        return applyDamage(false, monsterAttackDamage(baseDamage));
+    }
+
+    /** 预估怪物攻击的最终伤害（不实际结算），供 AI 展示意图数值。 */
+    public int monsterAttackDamage(int baseDamage) {
+        int damage = Math.max(0, baseDamage) + getMonsterStatusStacks(StatusEffect.STRENGTH);
+        if (getMonsterStatusStacks(StatusEffect.WEAK) > 0) {
+            damage = damage * 3 / 4;
+        }
+        return damage;
+    }
+
+    /** 给玩家叠加状态层数，供怪物 AI 释放减益效果。 */
+    public void addPlayerStatus(StatusEffect effect, int amount) {
+        if (effect == null || amount == 0) {
+            return;
+        }
+        player.addStacks(effect, amount);
+    }
+
+    /** 玩家身上某种状态的层数。 */
+    public int playerStacks(StatusEffect effect) {
+        return effect == null ? 0 : player.getStacks(effect);
+    }
+
+    /** 怪物已损失的生命值，供「越打越猛」这类 AI 计算成长。 */
+    public int monsterHpLost() {
+        return Math.max(0, monsterMaxHp - monsterHp);
+    }
+
+    /**
      * 给怪物增加护甲。amount &lt;= 0 时忽略。
      */
     public void addMonsterBlock(int amount) {
