@@ -224,11 +224,12 @@ public final class GameStateJson {
     // ---------- 商店 ----------
 
     /**
-     * 真实商店快照：金币、未售出的卡牌商品、可删卡列表、删卡状态与价格。
+     * 真实商店快照：金币、未售出的商品、可删卡列表、删卡状态与价格。
      * availableItems 来自 ShopService.getAvailableItems()（只含未售出），故 sold 恒 false。
      *
-     * <p>每个商品内嵌一份 {@code card}（与奖励候选卡同构），前端据此渲染卡面；
-     * 只买卡时前端的兜底文字块就是用 name/description/rarity 这三个平铺字段。</p>
+     * <p>商品现在有<b>两种</b>：卡牌（内嵌一份 {@code card}，与奖励候选卡同构，前端据此
+     * 渲染卡面）和遗物（{@code card} 为 null，{@code kind} 为 RELIC）。ShopService 每间商店
+     * 都会塞一件遗物，所以这里的两个分支是常态路径，不是兜底。</p>
      */
     public static String shopJson(
             int gold,
@@ -243,6 +244,25 @@ public final class GameStateJson {
                 sb.append(',');
             }
             com.roguelike.dungeon.game.shop.ShopItem item = availableItems.get(i);
+            if (item.isRelic()) {
+                // 内嵌一份 relic，形状与 characterJson 里的 relics 一致 —— 前端要拿
+                // relic.id 去 RelicTheme 取图标。商品自己的 id（shop-relic-1）是购买时
+                // 回传用的槽位号，不是遗物 id，两者不能混。
+                sb.append("{\"id\":").append(Json.str(item.id()))
+                  .append(",\"name\":").append(Json.str(item.relic().name()))
+                  .append(",\"kind\":\"RELIC\"")
+                  .append(",\"price\":").append(item.price())
+                  .append(",\"description\":").append(Json.str(item.relic().description()))
+                  .append(",\"rarity\":").append(Json.str(item.relic().rarity().name()))
+                  .append(",\"sold\":false")
+                  .append(",\"card\":null")
+                  .append(",\"relic\":{\"id\":").append(Json.str(item.relic().id()))
+                  .append(",\"name\":").append(Json.str(item.relic().name()))
+                  .append(",\"description\":").append(Json.str(item.relic().description()))
+                  .append(",\"icon\":null}")
+                  .append('}');
+                continue;
+            }
             String rarity = item.card().rarity().name();
             sb.append("{\"id\":").append(Json.str(item.id()))
               .append(",\"name\":").append(Json.str(item.card().name()))

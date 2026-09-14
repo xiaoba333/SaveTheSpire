@@ -155,6 +155,26 @@ class MapGeneratorTest {
         }
     }
 
+    @Test
+    void pathsShouldNotChainShopOrRestRooms() {
+        for (long seed = 0; seed < 50; seed++) {
+            DungeonMap map = new MapGenerator().generate(seed);
+            for (MapNode node : map.getNodes()) {
+                for (int nextNodeId : node.nextNodeIds()) {
+                    MapNode target = map.getNode(nextNodeId);
+                    assertFalse(node.type() == MapNodeType.SHOP
+                                    && target.type() == MapNodeType.SHOP,
+                            "种子 " + seed + " 商店相连："
+                                    + node.id() + " -> " + target.id());
+                    assertFalse(node.type() == MapNodeType.REST
+                                    && target.type() == MapNodeType.REST,
+                            "种子 " + seed + " 火堆相连："
+                                    + node.id() + " -> " + target.id());
+                }
+            }
+        }
+    }
+
     private static void visit(
             DungeonMap map,
             MapNode node,

@@ -53,6 +53,8 @@ public final class GameServer {
     /** 未显式指定 actCount 时的章节数；至少 2 章，才能在打完第一章 Boss 后进入下一层。 */
     private static final int DEFAULT_ACT_COUNT = 2;
 
+    // 固定商店库存表（SHOP_ITEMS）已随 dev 一起移除：#92 之后商店由
+    // game/shop/ShopService 动态生成（含 #100 加的遗物商品），HTTP 层只做透传。
     private final HttpServer server;
     private final GameCharacterCatalog catalog = new GameCharacterCatalog();
 
@@ -326,7 +328,7 @@ public final class GameServer {
     }
 
     private String blessingStateJson() {
-        if (controller.getPhase() != GamePhase.BLESSING) {
+        if (controller.getCurrentBlessingOptions().isEmpty()) {
             return GameStateJson.emptyBlessingJson();
         }
         return GameStateJson.blessingJson(
@@ -491,6 +493,10 @@ public final class GameServer {
         }
     }
 
+    // 原来这里有一段按 item.kind() 手动结算购买效果的 switch（CARD/RELIC/POTION/SERVICE），
+    // 那是 dev 把商店换成 ShopService 之前的写法。现在购买统一走
+    // `controller.buyShopItem(itemId)`（见上面的 handleBuy），效果在 ShopService 里结算，
+    // 这里不再需要。遗物/药水的支持由 ShopService + ShopItem 提供（#100 加的）。
     private void handleRemove(HttpExchange ex) throws IOException {
         if (requireController(ex) == null) {
             return;

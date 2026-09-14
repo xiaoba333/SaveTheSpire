@@ -224,8 +224,12 @@ public final class GameFlowDebugMain {
             System.out.println("  " + node.id() + " - " + typeName(node));
         }
 
-        String input = readLine("请输入节点编号：");
+        String input = readLine("请输入节点编号（或 back 回看开局房间）：");
         if (!running) {
+            return;
+        }
+        if (input.equalsIgnoreCase("back")) {
+            printResolvedBlessing();
             return;
         }
         try {
@@ -235,6 +239,20 @@ public final class GameFlowDebugMain {
             System.out.println("请输入整数节点编号。");
         } catch (IllegalArgumentException | IllegalStateException exception) {
             System.out.println("无法进入节点：" + exception.getMessage());
+        }
+    }
+
+    private void printResolvedBlessing() {
+        System.out.println("\n=== " + BlessingService.TITLE + "（已领取，不能重选）===");
+        System.out.println(BlessingService.DESCRIPTION);
+        String chosenId = controller.getChosenBlessingOptionId();
+        for (BlessingOption option : controller.getCurrentBlessingOptions()) {
+            String mark = option.id().equals(chosenId) ? " ★已带走" : "";
+            System.out.println("  - " + option.label()
+                    + " | " + option.description() + mark);
+        }
+        if (!controller.getBlessingResultMessage().isBlank()) {
+            System.out.println(controller.getBlessingResultMessage());
         }
     }
 
@@ -438,11 +456,12 @@ public final class GameFlowDebugMain {
 
             System.out.println("\n=== 商店 ===");
             System.out.println("当前金币：" + state.getGold());
-            System.out.println("卡牌商品（每张 " + ShopService.CARD_PRICE + " 金币）：");
+            System.out.println("商品（卡牌 " + ShopService.CARD_PRICE
+                    + " 金币 / 遗物 " + ShopService.RELIC_PRICE + " 金币）：");
             for (int i = 0; i < items.size(); i++) {
                 ShopItem item = items.get(i);
-                System.out.println("  " + i + " - " + item.card().label()
-                        + " | " + item.card().description());
+                System.out.println("  " + i + " - " + item.displayLabel()
+                        + " | " + item.displayDescription());
             }
             if (items.isEmpty()) {
                 System.out.println("  （已售罄）");
@@ -483,7 +502,7 @@ public final class GameFlowDebugMain {
             ShopItem item = items.get(index);
             ShopActionResult result = controller.buyShopItem(item.id());
             System.out.println(result == ShopActionResult.SUCCESS
-                    ? "购买成功：" + item.card().name()
+                    ? "购买成功：" + item.displayName()
                     : "购买失败：" + shopResultText(result));
         } catch (NumberFormatException exception) {
             System.out.println("用法：buy <商品编号>，例如 buy 0");

@@ -27,6 +27,8 @@ public final class BlessingService {
 
     private BlessingType pendingType;
     private boolean resolved;
+    private String chosenOptionId = "";
+    private String resultMessage = "";
 
     public BlessingService(RunState runState, long seed) {
         this(runState, rollTypes(seed));
@@ -61,6 +63,16 @@ public final class BlessingService {
 
     public boolean isResolved() {
         return resolved;
+    }
+
+    /** 已领取的选项编号；尚未领取时为空字符串。 */
+    public String chosenOptionId() {
+        return chosenOptionId;
+    }
+
+    /** 领取结果说明；尚未领取时为空字符串。 */
+    public String resultMessage() {
+        return resultMessage;
     }
 
     public boolean isAwaitingCard() {
@@ -140,16 +152,16 @@ public final class BlessingService {
         return switch (type) {
             case MAX_HP -> {
                 runState.getPlayer().increaseMaxHealth(MAX_HEALTH_BONUS);
-                yield complete("最大生命值增加 " + MAX_HEALTH_BONUS + " 点。");
+                yield complete(type, "最大生命值增加 " + MAX_HEALTH_BONUS + " 点。");
             }
             case GOLD -> {
                 runState.addGold(GOLD_BONUS);
-                yield complete("获得了 " + GOLD_BONUS + " 金币。");
+                yield complete(type, "获得了 " + GOLD_BONUS + " 金币。");
             }
             case DAMAGE_GOLD -> {
                 int lost = runState.getPlayer().takeDamage(DAMAGE_COST);
                 runState.addGold(DAMAGE_GOLD_BONUS);
-                yield complete("受到 " + lost + " 点伤害，获得了 "
+                yield complete(type, "受到 " + lost + " 点伤害，获得了 "
                         + DAMAGE_GOLD_BONUS + " 金币。");
             }
             default -> new BlessingActionResult(
@@ -166,7 +178,7 @@ public final class BlessingService {
                     "永久牌组中不存在该卡牌：" + cardInstanceId);
         }
         runState.removeCard(cardInstanceId);
-        return complete("已从牌组中删除「" + card.displayName() + "」。");
+        return complete(pendingType, "已从牌组中删除「" + card.displayName() + "」。");
     }
 
     private BlessingActionResult upgradeCard(String cardInstanceId) {
@@ -186,12 +198,14 @@ public final class BlessingService {
                     BlessingActionStatus.CARD_NOT_UPGRADABLE,
                     "这张卡牌不能继续升级。");
         }
-        return complete("「" + card.displayName() + "」已升级。");
+        return complete(pendingType, "「" + card.displayName() + "」已升级。");
     }
 
-    private BlessingActionResult complete(String message) {
+    private BlessingActionResult complete(BlessingType type, String message) {
         resolved = true;
         pendingType = null;
+        chosenOptionId = type.id();
+        resultMessage = message;
         return new BlessingActionResult(BlessingActionStatus.SUCCESS, message);
     }
 
