@@ -308,7 +308,7 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/blessing".equals(path) && "GET".equals(ex.getRequestMethod())) {
-                if (!requireRun(ex)) {
+                if (requireController(ex) == null) {
                     return;
                 }
                 sendJson(ex, 200, blessingStateJson());
@@ -338,7 +338,7 @@ public final class GameServer {
     }
 
     private void handleChooseBlessing(HttpExchange ex) throws IOException {
-        if (!requireRun(ex)) {
+        if (requireController(ex) == null) {
             return;
         }
         if (controller.getPhase() != GamePhase.BLESSING) {
