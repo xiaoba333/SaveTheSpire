@@ -74,7 +74,7 @@ public final class Intents {
                 ? "打" + damage
                 : "打" + damage + "*" + count + "（" + damage + "伤害" + count + "次）";
         String icon = count == 1 ? ICON_ATTACK : ICON_ATTACK_MULTI;
-        return new Intent(IntentType.ATTACK, text, icon, (self, ctx) -> {
+        return new Intent(IntentType.ATTACK, text, icon, damage, (self, ctx) -> {
             for (int i = 0; i < count; i++) {
                 if (self.isDead() || ctx.player().getHealth() <= 0) {
                     return;
@@ -91,7 +91,7 @@ public final class Intents {
     public static Intent attackWithStatus(int damage, String statusId, int stacks) {
         String statusName = StatusRegistry.displayName(statusId);
         String text = "打" + damage + "，给予 " + stacks + " 层" + statusName;
-        return new Intent(IntentType.ATTACK_DEBUFF, text, ICON_ATTACK_DEBUFF, (self, ctx) -> {
+        return new Intent(IntentType.ATTACK_DEBUFF, text, ICON_ATTACK_DEBUFF, damage, (self, ctx) -> {
             int damageDealt = damage + self.getStrength();
             ctx.damagePlayer(damageDealt, self);
             ctx.log("  " + self.displayName() + " 攻击玩家 " + damageDealt + " 点" + strengthSuffix(self));
@@ -106,7 +106,7 @@ public final class Intents {
 
     /** 自己叠 {@code amount} 点护甲。 */
     public static Intent block(int amount) {
-        return new Intent(IntentType.DEFEND, "防" + amount, ICON_DEFEND, (self, ctx) -> {
+        return new Intent(IntentType.DEFEND, "防" + amount, ICON_DEFEND, amount, (self, ctx) -> {
             self.addArmor(amount);
             ctx.log("  " + self.displayName() + " 获得 " + amount + " 点护甲");
         });
@@ -115,7 +115,7 @@ public final class Intents {
     /** 自己叠护甲并获得力量：「防6并获得2力量」。 */
     public static Intent blockAndStrength(int blockAmount, int strength) {
         String text = "防" + blockAmount + "并获得" + strength + "力量";
-        return new Intent(IntentType.DEFEND_BUFF, text, ICON_DEFEND_BUFF, (self, ctx) -> {
+        return new Intent(IntentType.DEFEND_BUFF, text, ICON_DEFEND_BUFF, blockAmount, (self, ctx) -> {
             self.addArmor(blockAmount);
             self.addStrength(strength);
             ctx.log("  " + self.displayName() + " 获得 " + blockAmount + " 点护甲与 "
@@ -127,7 +127,7 @@ public final class Intents {
     public static Intent giveAllyBlock(String allyMonsterId, int blockAmount) {
         String allyName = allyDisplayName(allyMonsterId);
         String text = "给" + allyName + "上" + blockAmount + "甲";
-        return new Intent(IntentType.DEFEND, text, ICON_DEFEND, (self, ctx) ->
+        return new Intent(IntentType.DEFEND, text, ICON_DEFEND, blockAmount, (self, ctx) ->
                 ctx.findAlly(self, allyMonsterId).ifPresentOrElse(ally -> {
                     ally.addArmor(blockAmount);
                     ctx.log("  " + self.displayName() + " 给 " + ally.displayName()
@@ -139,7 +139,7 @@ public final class Intents {
     /** 自己和所有同伴各加 {@code strength} 点力量：「两人都加一力量」。 */
     public static Intent buffAlliesStrength(int strength) {
         String text = "全体加" + strength + "力量";
-        return new Intent(IntentType.BUFF, text, ICON_BUFF, (self, ctx) -> {
+        return new Intent(IntentType.BUFF, text, ICON_BUFF, strength, (self, ctx) -> {
             self.addStrength(strength);
             for (Monster ally : ctx.allies(self)) {
                 ally.addStrength(strength);
@@ -156,7 +156,7 @@ public final class Intents {
     public static Intent debuffPlayer(String statusId, int stacks) {
         String statusName = StatusRegistry.displayName(statusId);
         String text = "给予玩家 " + stacks + " 层" + statusName;
-        return new Intent(IntentType.DEBUFF, text, ICON_DEBUFF, (self, ctx) -> {
+        return new Intent(IntentType.DEBUFF, text, ICON_DEBUFF, stacks, (self, ctx) -> {
             ctx.applyStatusToPlayer(statusId, stacks, self);
             ctx.log("  " + self.displayName() + " 给予玩家 " + stacks + " 层" + statusName);
         });
@@ -168,7 +168,7 @@ public final class Intents {
 
     /** 回复自己的血量：「回6」。 */
     public static Intent healSelf(int amount) {
-        return new Intent(IntentType.HEAL, "回" + amount, ICON_HEAL, (self, ctx) -> {
+        return new Intent(IntentType.HEAL, "回" + amount, ICON_HEAL, amount, (self, ctx) -> {
             self.heal(amount);
             ctx.log("  " + self.displayName() + " 回复 " + amount + " 点生命（当前 "
                     + self.getHealth() + "/" + self.getMaxHealth() + "）");
@@ -178,7 +178,7 @@ public final class Intents {
     /** 自己和所有同伴各回血：「给两人回6血」。 */
     public static Intent healAllies(int amount) {
         String text = "全体回" + amount + "血";
-        return new Intent(IntentType.HEAL, text, ICON_HEAL, (self, ctx) -> {
+        return new Intent(IntentType.HEAL, text, ICON_HEAL, amount, (self, ctx) -> {
             self.heal(amount);
             for (Monster ally : ctx.allies(self)) {
                 ally.heal(amount);
@@ -268,13 +268,32 @@ public final class Intents {
      * @param action      执行体
      */
     public static Intent custom(IntentType type, String displayText, String iconKey, EnemyAction action) {
-        return new Intent(type, displayText, iconKey, action);
+        return custom(type, displayText, iconKey, 0, action);
+    }
+
+    /**
+     * 自定义意图，并指定图标上要显示的数字。
+     *
+     * @param amount 攻击填伤害、防御填格挡量；没有数字可显示就传 0（UI 不画）
+     */
+    public static Intent custom(IntentType type, String displayText, String iconKey, int amount, EnemyAction action) {
+        return new Intent(type, displayText, iconKey, amount, action);
     }
 
     /** 把若干行动拼成一个意图，展示文本自定。 */
     public static Intent composite(IntentType type, String displayText, String iconKey, EnemyAction... actions) {
+        return composite(type, displayText, iconKey, 0, actions);
+    }
+
+    /**
+     * 把若干行动拼成一个意图，展示文本自定，并指定图标上要显示的数字。
+     *
+     * <p>组合意图的文本是手写的（「防10，给予玩家 1 层虚弱」），数字不会自动从行动里来，
+     * 所以要显示就得自己传——防御类填格挡量。</p>
+     */
+    public static Intent composite(IntentType type, String displayText, String iconKey, int amount, EnemyAction... actions) {
         Objects.requireNonNull(actions, "actions");
-        return new Intent(type, displayText, iconKey, (self, ctx) -> {
+        return new Intent(type, displayText, iconKey, amount, (self, ctx) -> {
             for (EnemyAction action : actions) {
                 if (self.isDead()) {
                     return;

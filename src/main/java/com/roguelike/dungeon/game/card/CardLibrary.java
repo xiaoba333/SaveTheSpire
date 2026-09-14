@@ -394,6 +394,202 @@ public final class CardLibrary {
             true,
             CardRarity.RARE);
 
+    public static final Card ADRENALINE = new Card(
+            "adrenaline",
+            "肾上腺素",
+            CardType.SKILL,
+            0,
+            "获得 1 点能量，抽 2 张牌，消耗。",
+            "获得 2 点能量，抽 2 张牌，消耗。",
+            context -> {
+                context.addPlayerEnergy(context.isUpgraded() ? 2 : 1);
+                context.drawCards(2);
+            },
+            true,
+            true,
+            true,
+            CardRarity.RARE);
+
+    public static final Card BACKFLIP = new Card(
+            "backflip",
+            "后空翻",
+            CardType.SKILL,
+            1,
+            "获得 5 点格挡，抽 2 张牌。",
+            "获得 8 点格挡，抽 2 张牌。",
+            context -> {
+                context.addPlayerBlock(context.isUpgraded() ? 8 : 5);
+                context.drawCards(2);
+            },
+            false,
+            true,
+            true,
+            CardRarity.COMMON);
+
+    public static final Card BACKSTAB = new Card(
+            "backstab",
+            "背刺",
+            CardType.ATTACK,
+            0,
+            "造成 11 点伤害，消耗。",
+            "造成 15 点伤害，消耗。",
+            context -> context.dealDamageToMonster(
+                    context.isUpgraded() ? 15 : 11),
+            true,
+            true,
+            true,
+            CardRarity.UNCOMMON);
+
+    public static final Card BANDAGE_UP = new Card(
+            "bandage_up",
+            "包扎",
+            CardType.SKILL,
+            0,
+            "回复 4 点生命，消耗。",
+            "回复 6 点生命，消耗。",
+            context -> context.healPlayer(context.isUpgraded() ? 6 : 4),
+            true,
+            true,
+            true,
+            CardRarity.UNCOMMON);
+
+    public static final Card BITE = new Card(
+            "bite",
+            "噬咬",
+            CardType.ATTACK,
+            1,
+            "造成 7 点伤害，回复 2 点生命。",
+            "造成 8 点伤害，回复 3 点生命。",
+            context -> {
+                context.dealDamageToMonster(context.isUpgraded() ? 8 : 7);
+                context.healPlayer(context.isUpgraded() ? 3 : 2);
+            },
+            false,
+            true,
+            true,
+            CardRarity.UNCOMMON);
+
+    public static final Card BLUDGEON = new Card(
+            "bludgeon",
+            "重锤",
+            CardType.ATTACK,
+            3,
+            "造成 32 点伤害。",
+            "造成 42 点伤害。",
+            context -> context.dealDamageToMonster(
+                    context.isUpgraded() ? 42 : 32),
+            false,
+            true,
+            true,
+            CardRarity.RARE);
+
+    public static final Card BEAM_CELL = new Card(
+            "beam_cell",
+            "光束射线",
+            CardType.ATTACK,
+            0,
+            "造成 3 点伤害，给予 1 层易伤。",
+            "造成 4 点伤害，给予 2 层易伤。",
+            context -> {
+                context.dealDamageToMonster(context.isUpgraded() ? 4 : 3);
+                context.applyStatusToMonster(
+                        StatusEffect.VULNERABLE,
+                        context.isUpgraded() ? 2 : 1);
+            },
+            false,
+            true,
+            true,
+            CardRarity.COMMON);
+
+    public static final Card BLIND = new Card(
+            "blind",
+            "致盲",
+            CardType.SKILL,
+            0,
+            "给予 2 层虚弱。",
+            "给予所有敌人 2 层虚弱。",
+            context -> context.applyStatusToAllMonsters(StatusEffect.WEAK, 2),
+            false,
+            true,
+            true,
+            CardRarity.UNCOMMON);
+
+    public static final Card BOUNCING_FLASK = new Card(
+            "bouncing_flask",
+            "弹跳药瓶",
+            CardType.SKILL,
+            2,
+            "随机给予敌人 3 层中毒，执行 3 次。",
+            "随机给予敌人 3 层中毒，执行 4 次。",
+            context -> {
+                int times = context.isUpgraded() ? 4 : 3;
+                for (int i = 0; i < times; i++) {
+                    context.applyStatusToMonster(StatusEffect.POISON, 3);
+                }
+            },
+            false,
+            true,
+            true,
+            CardRarity.UNCOMMON);
+
+    public static final Card BOWLING_BASH = new Card(
+            "bowling_bash",
+            "碰撞连击",
+            CardType.ATTACK,
+            1,
+            "当前每有一名敌人，造成 7 点伤害。",
+            "当前每有一名敌人，造成 10 点伤害。",
+            context -> context.dealDamageToMonster(
+                    context.isUpgraded() ? 10 : 7),
+            false,
+            true,
+            true,
+            CardRarity.COMMON);
+
+    public static final Card AUTO_SHIELDS = new Card(
+            "auto_shields",
+            "自动护盾",
+            CardType.SKILL,
+            1,
+            "如果你没有格挡，获得 11 点格挡。",
+            "如果你没有格挡，获得 15 点格挡。",
+            context -> {
+                if (context.getPlayerBlock() == 0) {
+                    context.addPlayerBlock(context.isUpgraded() ? 15 : 11);
+                }
+            },
+            false,
+            true,
+            true,
+            CardRarity.UNCOMMON);
+
+    public static final Card BODY_SLAM = new Card(
+            "body_slam",
+            "全身撞击",
+            CardType.ATTACK,
+            1,
+            "造成你当前格挡值的伤害。",
+            "造成你当前格挡值的伤害。",
+            context -> context.dealDamageToMonster(context.getPlayerBlock()),
+            false,
+            true,
+            true,
+            CardRarity.COMMON);
+
+    public static final Card BOOT_SEQUENCE = new Card(
+            "boot_sequence",
+            "启动流程",
+            CardType.SKILL,
+            0,
+            "获得 10 点格挡，消耗。",
+            "获得 13 点格挡，消耗。",
+            context -> context.addPlayerBlock(
+                    context.isUpgraded() ? 13 : 10),
+            true,
+            true,
+            true,
+            CardRarity.UNCOMMON);
+
     /**
      * 锻造：升级玩家选中的一张手牌。
      *
@@ -461,6 +657,19 @@ public final class CardLibrary {
             Map.entry(BLOOD_REBIRTH.id(), BLOOD_REBIRTH),
             Map.entry(BLOOD_RAIN.id(), BLOOD_RAIN),
             Map.entry(DUSK_VEIL.id(), DUSK_VEIL),
+            Map.entry(ADRENALINE.id(), ADRENALINE),
+            Map.entry(BACKFLIP.id(), BACKFLIP),
+            Map.entry(BACKSTAB.id(), BACKSTAB),
+            Map.entry(BANDAGE_UP.id(), BANDAGE_UP),
+            Map.entry(BITE.id(), BITE),
+            Map.entry(BLUDGEON.id(), BLUDGEON),
+            Map.entry(BEAM_CELL.id(), BEAM_CELL),
+            Map.entry(BLIND.id(), BLIND),
+            Map.entry(BOUNCING_FLASK.id(), BOUNCING_FLASK),
+            Map.entry(BOWLING_BASH.id(), BOWLING_BASH),
+            Map.entry(AUTO_SHIELDS.id(), AUTO_SHIELDS),
+            Map.entry(BODY_SLAM.id(), BODY_SLAM),
+            Map.entry(BOOT_SEQUENCE.id(), BOOT_SEQUENCE),
             Map.entry(FORGE.id(), FORGE),
             Map.entry(BLOOD_METALLICIZE.id(), BLOOD_METALLICIZE),
             Map.entry(DESCEND.id(), DESCEND));

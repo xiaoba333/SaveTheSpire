@@ -329,7 +329,7 @@ public final class GameController implements LevelFinishHandler {
      */
     private MonsterAi pickMonster(MapNode node) {
         return switch (node.type()) {
-            case BATTLE -> MonsterCatalog.randomEasy(rewardSeed(node));
+            case BATTLE -> MonsterCatalog.randomEncounter(rewardSeed(node));
             case ELITE -> MonsterCatalog.elite();
             case BOSS -> MonsterCatalog.boss(runState.shouldSmashAlmostCrackedEgg());
             default -> throw new IllegalStateException(
