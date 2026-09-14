@@ -30,7 +30,7 @@ public final class BattleStateJson {
         sb.append("\"turnNumber\":").append(combat.getTurnNumber()).append(',');
         sb.append("\"phase\":").append(Json.str(combat.getPhase())).append(',');
         sb.append("\"player\":").append(playerJson(combat)).append(',');
-        sb.append("\"enemies\":[").append(enemyJson(combat)).append("],");
+        sb.append("\"enemies\":[").append(enemiesJson(combat)).append("],");
         sb.append("\"hand\":[").append(handJson(combat)).append("],");
         sb.append("\"piles\":").append(pilesJson(combat)).append(',');
         sb.append("\"result\":").append(Json.str(combat.getResult())).append(',');
@@ -49,20 +49,41 @@ public final class BattleStateJson {
                 + ",\"buffs\":" + playerBuffsJson(c) + "}";
     }
 
-    private static String enemyJson(Combat c) {
-        Combat.Intent intent = c.getMonsterIntentInfo();
-        String intentJson = intent == null
+    /**
+     * 敌人数组：多怪编队时每个敌人一个元素，顺序与 {@code targetIndex} 一致。
+     *
+     * <p>单怪战斗仍是单元素数组，前端不需要分支处理。</p>
+     */
+    private static String enemiesJson(Combat c) {
+        java.util.List<Combat.MonsterView> enemies = c.getEnemies();
+        StringBuilder sb = new StringBuilder(enemies.size() * 96);
+        for (int i = 0; i < enemies.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(enemyJson(c, enemies.get(i)));
+        }
+        return sb.toString();
+    }
+
+    private static String enemyJson(Combat c, Combat.MonsterView enemy) {
+        String intentJson = enemy.intent() == null
                 ? "null"
-                : "{\"type\":" + Json.str(intent.type())
-                        + ",\"value\":" + intent.value() + "}";
-        return "{\"id\":" + Json.str(c.getMonsterId())
-                + ",\"hp\":" + c.getMonsterHp()
-                + ",\"maxHp\":" + c.getMonsterMaxHp()
-                + ",\"armor\":" + c.getMonsterBlock()
+                : "{\"type\":" + Json.str(enemy.intent().type())
+                        + ",\"value\":" + enemy.intent().value() + "}";
+        return "{\"index\":" + enemy.index()
+                + ",\"id\":" + Json.str(enemy.id())
+                + ",\"name\":" + Json.str(enemy.name())
+                + ",\"hp\":" + enemy.hp()
+                + ",\"maxHp\":" + enemy.maxHp()
+                + ",\"armor\":" + enemy.armor()
+                + ",\"strength\":" + enemy.strength()
+                + ",\"alive\":" + enemy.alive()
+                + ",\"targeted\":" + enemy.targeted()
                 + ",\"energy\":0"
                 + ",\"maxEnergy\":0"
                 + ",\"intent\":" + intentJson
-                + ",\"buffs\":" + enemyBuffsJson(c) + "}";
+                + ",\"buffs\":" + enemyBuffsJson(c, enemy.index()) + "}";
     }
 
     /** 玩家 buff = 状态效果（层数）+ 能力（无层数）。 */
@@ -93,13 +114,13 @@ public final class BattleStateJson {
         return sb.toString();
     }
 
-    /** 怪物 buff 只有状态效果（怪物无能力）。 */
-    private static String enemyBuffsJson(Combat c) {
+    /** 怪物 buff 只有状态效果（怪物无能力），按敌人下标逐个读取。 */
+    private static String enemyBuffsJson(Combat c, int enemyIndex) {
         StringBuilder sb = new StringBuilder(64);
         sb.append('[');
         boolean first = true;
         for (StatusEffect effect : StatusEffect.values()) {
-            int stacks = c.getMonsterStatusStacks(effect);
+            int stacks = c.getMonsterStatusStacks(enemyIndex, effect);
             if (stacks <= 0) {
                 continue;
             }

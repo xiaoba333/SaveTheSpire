@@ -40,6 +40,24 @@ public final class CombatFactory {
                 result -> { });
     }
 
+    /**
+     * HTTP 独立战斗的演示战斗，并指定出场编队。
+     *
+     * <p>前端联调「多敌人 + 选择目标」时用它开一场 {@code act1_grubs}
+     * 或 {@code act1_explorers}，不必走完整地图流程。</p>
+     *
+     * @param monsterAi 编队（通常来自 {@code MonsterCatalog.encounter(...)}）
+     */
+    public static Combat createHttpDemo(Consumer<String> logger, MonsterAi monsterAi) {
+        return new Combat(
+                new Player(Combat.PLAYER_MAX_HP, Combat.PLAYER_MAX_ENERGY),
+                forgeDemoDeck(),
+                logger,
+                result -> { },
+                upgradedCard -> { },
+                monsterAi);
+    }
+
     /** 与本局 RunState 共享玩家和牌组的战斗。 */
     public static Combat create(
             Player player,

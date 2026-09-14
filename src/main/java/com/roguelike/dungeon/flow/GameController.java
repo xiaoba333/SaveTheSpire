@@ -271,10 +271,16 @@ public final class GameController implements LevelFinishHandler {
         currentCampfire = new CampfireService(runState, this);
     }
 
-    /** 按节点类型挑选第一章怪物。 */
+    /**
+     * 按节点类型挑选第一章怪物。
+     *
+     * <p>普通战斗改为走<b>编队</b>池，因此会正常出现双怪遭遇
+     * （两条蛆、探险者二人组），玩家需要在战斗中选择先打哪一只。
+     * 精英与 Boss 暂时保持单怪，避免 Boss 蛋链的形态变换与多怪槽位耦合。</p>
+     */
     private MonsterAi pickMonster(MapNode node) {
         return switch (node.type()) {
-            case BATTLE -> MonsterCatalog.randomEasy(rewardSeed(node));
+            case BATTLE -> MonsterCatalog.randomEncounter(rewardSeed(node));
             case ELITE -> MonsterCatalog.elite();
             case BOSS -> MonsterCatalog.boss(runState.shouldSmashAlmostCrackedEgg());
             default -> throw new IllegalStateException(
