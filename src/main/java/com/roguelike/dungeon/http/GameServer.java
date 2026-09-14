@@ -335,6 +335,9 @@ public final class GameServer {
                 BlessingService.TITLE,
                 BlessingService.DESCRIPTION,
                 controller.isBlessingAwaitingCard(),
+                controller.isBlessingResolved(),
+                controller.getChosenBlessingOptionId(),
+                controller.getBlessingResultMessage(),
                 controller.getCurrentBlessingOptions(),
                 controller.getBlessingTargetCards());
     }

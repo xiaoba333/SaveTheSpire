@@ -153,12 +153,21 @@ public final class GameStateJson {
             String title,
             String description,
             boolean awaitingCard,
+            boolean resolved,
+            String chosenOptionId,
+            String resultMessage,
             List<BlessingOption> options,
             List<CardInstance> targetCards) {
         StringBuilder sb = new StringBuilder(256);
         sb.append("{\"title\":").append(Json.str(title));
         sb.append(",\"description\":").append(Json.str(description));
         sb.append(",\"awaitingCard\":").append(awaitingCard);
+        // 领取之后房间仍可回看（BlessingService 不再被丢弃），所以「还有三个选项」不
+        // 等于「还没领」。这三个字段就是给前端区分用的：resolved=true 时把选项渲染成
+        // 不可点，并显示当时选了什么、结果如何。没有它们，前端只能靠猜。
+        sb.append(",\"resolved\":").append(resolved);
+        sb.append(",\"chosenOptionId\":").append(Json.str(chosenOptionId));
+        sb.append(",\"resultMessage\":").append(Json.str(resultMessage));
         sb.append(",\"options\":[");
         for (int i = 0; i < options.size(); i++) {
             if (i > 0) {
@@ -186,7 +195,7 @@ public final class GameStateJson {
     }
 
     public static String emptyBlessingJson() {
-        return blessingJson("", "", false, List.of(), List.of());
+        return blessingJson("", "", false, false, "", "", List.of(), List.of());
     }
 
     // ---------- 奖励 ----------
