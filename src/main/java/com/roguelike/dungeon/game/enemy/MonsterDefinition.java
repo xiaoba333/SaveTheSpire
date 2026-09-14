@@ -40,6 +40,7 @@ public final class MonsterDefinition {
     private final List<StatusEffect> initialStatuses;
     private final IntFunction<EnemyScript> scriptFactory;
     private final Set<String> tags;
+    private final String nextFormId;
 
     private MonsterDefinition(Builder builder) {
         this.id = builder.id;
@@ -49,6 +50,7 @@ public final class MonsterDefinition {
         this.initialStatuses = List.copyOf(builder.initialStatuses);
         this.scriptFactory = builder.scriptFactory;
         this.tags = Collections.unmodifiableSet(new LinkedHashSet<>(builder.tags));
+        this.nextFormId = builder.nextFormId;
     }
 
     // ------------------------------------------------------------------
@@ -83,6 +85,13 @@ public final class MonsterDefinition {
     /** 是否带有某个标签。 */
     public boolean hasTag(String tag) {
         return tags.contains(tag);
+    }
+
+    /**
+     * 当前形态被打死或自行破裂后变成谁；没有下一形态时为 {@code null}（此时才算战斗胜利）。
+     */
+    public String nextFormId() {
+        return nextFormId;
     }
 
     // ------------------------------------------------------------------
@@ -133,6 +142,7 @@ public final class MonsterDefinition {
         private final List<StatusEffect> initialStatuses = new ArrayList<>();
         private final List<String> tags = new ArrayList<>();
         private IntFunction<EnemyScript> scriptFactory;
+        private String nextFormId;
 
         private Builder(String id, String displayName, int maxHealth) {
             this.id = Objects.requireNonNull(id, "id");
@@ -177,6 +187,12 @@ public final class MonsterDefinition {
         /** 打标签，例如 act1 / normal / elite / boss。 */
         public Builder tag(String... tags) {
             this.tags.addAll(List.of(tags));
+            return this;
+        }
+
+        /** 被打死或破裂后变成该 ID 的下一形态。 */
+        public Builder nextForm(String nextFormId) {
+            this.nextFormId = nextFormId;
             return this;
         }
 

@@ -30,8 +30,8 @@ import com.roguelike.dungeon.game.enemy.status.StatusIds;
  *   探险者男                    30 血，给女探险者上10甲 / 打6 / 打12
  *   探险者女                    20 血，打2*3 / 两人都加一力量 / 给两人回6血
  * 精英怪
- *   巨人遗骸                    75 血，初始「无灵」，1-2循环：打6+1易伤 / 打12
- *                               血量 ≤ 20 → 无灵消失，获得「复苏」，2-3循环：回复10血 / 打6+1易伤 / 打12
+ *   巨人遗骸                    75 血，初始「无灵」，1-2循环：打6+2易伤 / 打12
+ *                               血量 ≤ 20 → 无灵消失，获得「复苏」，2-3循环：回复10血 / 打6+2易伤 / 打12
  * Boss
  *   凯洛斯的蛋（无暇/轻微破裂/中度破裂/几乎破裂） 10/20/30/40 血，意图为「破裂」，每破裂一次给凯洛斯 +1 层蜕变
  *   凯洛斯（破壳而出）          100 血，打0*9 / 向玩家抽牌堆塞甲片 / 打12
@@ -186,9 +186,9 @@ public final class ActOneBestiary {
     /**
      * 巨人遗骸：75 血，初始拥有状态「无灵」（无法被易伤、虚弱、中毒）。
      *
-     * <p>第一阶段意图：1-2 循环「打6并给予1层易伤 / 打12」。</p>
+     * <p>第一阶段意图：1-2 循环「打6并给予2层易伤 / 打12」。</p>
      * <p>血量跌落到 20（含）以下时：无灵状态消失，获得状态「复苏」（所有行动判定两次），
-     * 意图更变为 2-3 循环「回复10血 / 打6并给予1层易伤 / 打12」。</p>
+     * 意图更变为 2-3 循环「回复10血 / 打6并给予2层易伤 / 打12」。</p>
      */
     public static final MonsterDefinition GIANT_REMAINS = MonsterDefinition
             .builder("giant_remains", "巨人遗骸", 75)
@@ -201,7 +201,7 @@ public final class ActOneBestiary {
                             PhaseScript.healthAtMost(20),
                             Scripts.loopFrom(1,
                                     Intents.healSelf(10),
-                                    Intents.attackWithStatus(6, StatusIds.VULNERABLE, 1),
+                                    Intents.attackWithStatus(6, StatusIds.VULNERABLE, 2),
                                     Intents.attack(12)),
                             List.of(new RevivalStatus(1)),
                             List.of(StatusIds.SOULLESS))))
@@ -210,7 +210,7 @@ public final class ActOneBestiary {
 
     private static EnemyScript phaseOneIntents() {
         return Scripts.loop(
-                Intents.attackWithStatus(6, StatusIds.VULNERABLE, 1),
+                Intents.attackWithStatus(6, StatusIds.VULNERABLE, 2),
                 Intents.attack(12));
     }
 
@@ -238,7 +238,7 @@ public final class ActOneBestiary {
      * <p>意图：（1）打0*9（0伤害9次）→（2）向玩家抽牌堆增加一张甲片 →（3）打12。</p>
      *
      * <p>「打0*9」的 0 点基础伤害是刻意设计的：实际伤害完全来自力量，
-     * 蛋每破裂一次给 1 层「蜕变」，四次破裂后凯洛斯带着 4 点力量出场，
+     * 蛋每破裂一次累积 1 层「蜕变」（蛋形态不提供力量），四次破裂后凯洛斯把 4 层全部转化为力量，
      * 于是这一招变成 9 段各 4 点——正好是「早点打蛋 / 晚点打蛋」的抉择。</p>
      *
      * <p class="note">待确认：设计案未标注循环范围，此处按「1-2-3 循环」实现。</p>
@@ -254,18 +254,19 @@ public final class ActOneBestiary {
             .build();
 
     /**
-     * 蛋形态工厂：唯一意图就是「破裂」——杀死自身并把一层蜕变交给下一个形态。
+     * 蛋形态工厂：回合意图是「破裂」，玩家提前打死当前蛋也会进入下一形态。
      *
      * @param id         蛋形态 ID
      * @param displayName 展示名
      * @param health     该形态血量
-     * @param nextFormId 破裂后变成谁
+     * @param nextFormId 破裂或被打死之后变成谁
      */
     private static MonsterDefinition egg(String id, String displayName, int health, String nextFormId) {
         return MonsterDefinition
                 .builder(id, displayName, health)
                 .sprite("act1/" + id)
                 .script(variant -> Scripts.single(Intents.hatch(1, nextFormId)))
+                .nextForm(nextFormId)
                 .tag("act1", "boss", "egg")
                 .build();
     }

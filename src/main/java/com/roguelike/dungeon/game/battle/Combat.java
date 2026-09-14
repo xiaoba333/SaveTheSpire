@@ -391,6 +391,11 @@ public class Combat {
             return;
         }
         if (state.getMonsterHp() <= 0) {
+            if (monsterAi.onHpDepleted(state) && state.getMonsterHp() > 0) {
+                log(monsterAi.name() + "接替上场（HP "
+                        + state.getMonsterHp() + "/" + state.getMonsterMaxHp() + "）。");
+                return;
+            }
             int herdStacks = state.getMonsterStacks(StatusEffect.BLOOD_HERD);
             if (herdStacks > 0) {
                 state.getPlayer().increaseMaxHealth(herdStacks);

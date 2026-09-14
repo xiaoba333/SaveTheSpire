@@ -1,12 +1,14 @@
 package com.roguelike.dungeon.game.battle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.enemy.bestiary.ActOneBestiary;
+import com.roguelike.dungeon.game.enemy.status.StatusIds;
 
 import java.util.List;
 import java.util.stream.IntStream;
@@ -75,6 +77,80 @@ class MonsterAiTest {
         Combat combat = combatWith(MonsterCatalog.boss());
         assertTrue(combat.getMonsterName().contains("凯洛斯的蛋"));
         assertEquals(10, combat.getMonsterMaxHp());
+    }
+
+    @Test
+    void killingBossEggAdvancesToNextPhaseInsteadOfWinning() {
+        ScriptedMonsterAi ai = ScriptedMonsterAi.of("kairos_egg_1");
+        Combat combat = combatWithStrikes(ai);
+
+        assertTrue(combat.getMonsterName().contains("无暇"));
+        assertEquals(PlayCardResult.SUCCESS, combat.playCard(0));
+        assertEquals(PlayCardResult.SUCCESS, combat.playCard(0));
+
+        assertFalse(combat.isFinished());
+        assertTrue(combat.getMonsterName().contains("轻微破裂"));
+        assertEquals(20, combat.getMonsterMaxHp());
+        assertEquals(20, combat.getMonsterHp());
+        assertEquals(1, ai.monster().statusStacks(StatusIds.METAMORPHOSIS));
+        assertEquals(0, ai.monster().getStrength());
+    }
+
+    @Test
+    void bossEggHatchesOnItsTurnWithoutEndingFight() {
+        ScriptedMonsterAi ai = ScriptedMonsterAi.of("kairos_egg_1");
+        Combat combat = combatWith(ai);
+
+        combat.endPlayerTurn();
+
+        assertFalse(combat.isFinished());
+        assertTrue(combat.getMonsterName().contains("轻微破裂"));
+        assertEquals(20, combat.getMonsterMaxHp());
+        assertEquals(1, ai.monster().statusStacks(StatusIds.METAMORPHOSIS));
+        assertEquals(0, ai.monster().getStrength());
+    }
+
+    @Test
+    void fourEggRupturesConvertMetamorphosisIntoKairosStrength() {
+        ScriptedMonsterAi ai = ScriptedMonsterAi.of("kairos_egg_1");
+        Combat combat = combatWith(ai);
+
+        for (int i = 0; i < 4; i++) {
+            combat.endPlayerTurn();
+        }
+
+        assertEquals("凯洛斯", combat.getMonsterName());
+        assertEquals(0, ai.monster().statusStacks(StatusIds.METAMORPHOSIS));
+        assertEquals(4, ai.monster().getStrength());
+        assertFalse(combat.isFinished());
+    }
+
+    @Test
+    void killingFinalKairosWinsTheFight() {
+        Combat combat = combatWithStrikes(ScriptedMonsterAi.of("kairos"));
+
+        int safety = 0;
+        while (!combat.isFinished() && safety++ < 80) {
+            while (!combat.getHand().isEmpty() && !combat.isFinished()) {
+                if (combat.playCard(0) != PlayCardResult.SUCCESS) {
+                    break;
+                }
+            }
+            if (!combat.isFinished()) {
+                combat.endPlayerTurn();
+            }
+        }
+
+        assertTrue(combat.isFinished());
+        assertEquals("VICTORY", combat.getResult());
+    }
+
+    private static Combat combatWithStrikes(MonsterAi monsterAi) {
+        Player player = new Player(200, 3);
+        List<CardInstance> deck = IntStream.range(0, 40)
+                .mapToObj(i -> new CardInstance("strike-" + i, CardLibrary.STRIKE))
+                .toList();
+        return new Combat(player, deck, line -> { }, result -> { }, card -> { }, monsterAi);
     }
 
     @Test

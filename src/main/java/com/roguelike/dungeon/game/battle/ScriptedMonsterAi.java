@@ -11,6 +11,7 @@ import com.roguelike.dungeon.game.enemy.MonsterDefinition;
 import com.roguelike.dungeon.game.enemy.bestiary.ActOneBestiary;
 import com.roguelike.dungeon.game.enemy.intent.Intent;
 import com.roguelike.dungeon.game.enemy.intent.IntentType;
+import com.roguelike.dungeon.game.enemy.intent.Intents;
 import com.roguelike.dungeon.game.enemy.status.StatusIds;
 
 import java.util.List;
@@ -28,6 +29,8 @@ public final class ScriptedMonsterAi implements MonsterAi {
     private Monster monster;
     private BattleState boundState;
     private final Random random = new Random();
+    /** 蛋链累积的蜕变层数，不跟蛋实例走，避免破裂死亡把状态清掉。 */
+    private int metamorphosisStacks;
 
     public static ScriptedMonsterAi of(String monsterId) {
         ActOneBestiary.init();
@@ -96,6 +99,7 @@ public final class ScriptedMonsterAi implements MonsterAi {
         acting.onTurnStart(ctx);
         acting.takeTurn(ctx);
         if (monster != acting) {
+            persistMetamorphosisAfterRupture();
             monster.planIntent(ctx);
         } else if (!monster.isDead()) {
             monster.onTurnEnd(ctx);
@@ -110,6 +114,44 @@ public final class ScriptedMonsterAi implements MonsterAi {
         return attacked
                 ? MonsterTurnResult.attack(0)
                 : MonsterTurnResult.defend(monster.getArmor());
+    }
+
+    @Override
+    public boolean onHpDepleted(BattleState state) {
+        this.boundState = state;
+        if (monster == null || !monster.isDead()) {
+            return false;
+        }
+        String nextFormId = monster.definition().nextFormId();
+        if (nextFormId == null || nextFormId.isBlank()) {
+            return false;
+        }
+        Context ctx = new Context();
+        Intents.hatch(1, nextFormId).action().perform(monster, ctx);
+        if (monster.isDead()) {
+            return false;
+        }
+        persistMetamorphosisAfterRupture();
+        monster.planIntent(ctx);
+        state.bindLivingMonster(monster);
+        state.syncFromLivingMonster();
+        return true;
+    }
+
+    /**
+     * 破裂后用 AI 自己记的层数重挂状态。旧蛋死亡时身上的蜕变可能已被清掉，
+     * 这里按「每次破裂 +1」累加，本体出场时一次性写成力量。
+     */
+    private void persistMetamorphosisAfterRupture() {
+        metamorphosisStacks++;
+        monster.removeStatus(StatusIds.METAMORPHOSIS);
+        if (monster.definition().nextFormId() != null) {
+            if (metamorphosisStacks > 0) {
+                monster.applyStatus(StatusIds.METAMORPHOSIS, metamorphosisStacks);
+            }
+        } else {
+            monster.setBaseStrength(Math.max(monster.baseStrength(), metamorphosisStacks));
+        }
     }
 
     private final class Context implements BattleContext {
