@@ -152,7 +152,7 @@ public final class GameController implements LevelFinishHandler {
         return currentCampfire == null ? List.of() : currentCampfire.getUpgradeableCards();
     }
 
-    /** 当前商店尚未售出的卡牌商品。 */
+    /** 当前商店尚未售出的商品（卡牌与遗物）。 */
     public List<ShopItem> getCurrentShopItems() {
         return currentShop == null ? List.of() : currentShop.getAvailableItems();
     }
@@ -166,9 +166,24 @@ public final class GameController implements LevelFinishHandler {
         return currentShop != null && currentShop.isCardRemovalUsed();
     }
 
-    /** 开局房间当前抽出的三个选项；不在祝福阶段时为空。 */
+    /** 开局房间当前抽出的三个选项；领取后仍可查看。 */
     public List<BlessingOption> getCurrentBlessingOptions() {
         return currentBlessing == null ? List.of() : currentBlessing.getOptions();
+    }
+
+    /** 开局馈赠是否已经领取。领取后仍可回看房间，但不能再选。 */
+    public boolean isBlessingResolved() {
+        return currentBlessing != null && currentBlessing.isResolved();
+    }
+
+    /** 已领取的馈赠编号；尚未领取时为空。 */
+    public String getChosenBlessingOptionId() {
+        return currentBlessing == null ? "" : currentBlessing.chosenOptionId();
+    }
+
+    /** 领取结果说明；尚未领取时为空。 */
+    public String getBlessingResultMessage() {
+        return currentBlessing == null ? "" : currentBlessing.resultMessage();
     }
 
     /** 开局房间是否正在等待玩家指定一张牌。 */
@@ -343,7 +358,8 @@ public final class GameController implements LevelFinishHandler {
                 runState,
                 rewardPool,
                 shopSeed(node),
-                this);
+                this,
+                relicService);
     }
 
     private void finishBattle(LevelResult result) {
@@ -375,29 +391,15 @@ public final class GameController implements LevelFinishHandler {
                     rewardSeed(node),
                     ELITE_GOLD_REWARD,
                     relicService,
-                    relicRaritiesFor(node.type()));
+                    RelicRarity.COMMON, RelicRarity.UNCOMMON, RelicRarity.RARE);
             case BATTLE -> new RewardService(
                     runState,
                     rewardPool,
                     rewardSeed(node),
-                    BATTLE_GOLD_REWARD,
-                    relicService,
-                    relicRaritiesFor(node.type()));
+                    BATTLE_GOLD_REWARD);
             default -> throw new IllegalStateException(
                     "非战斗节点进入了战斗结算: " + node.type());
         };
-    }
-
-    /**
-     * 不同节点掉落的遗物稀有度。
-     *
-     * <p>普通战斗只掉普通 / 罕见，精英能掉稀有，避免开局就滚出太强的遗物。</p>
-     */
-    private static RelicRarity[] relicRaritiesFor(MapNodeType nodeType) {
-        return nodeType == MapNodeType.ELITE
-                ? new RelicRarity[]{
-                        RelicRarity.COMMON, RelicRarity.UNCOMMON, RelicRarity.RARE}
-                : new RelicRarity[]{RelicRarity.COMMON, RelicRarity.UNCOMMON};
     }
 
     private void finishNonBattleLevel(LevelResult result) {
@@ -413,7 +415,6 @@ public final class GameController implements LevelFinishHandler {
     }
 
     private void finishBlessing() {
-        currentBlessing = null;
         phase = GamePhase.MAP;
     }
 

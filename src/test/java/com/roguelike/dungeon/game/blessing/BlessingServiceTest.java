@@ -45,6 +45,9 @@ class BlessingServiceTest {
 
         assertTrue(service.choose(BlessingType.GOLD.id()).succeeded());
         assertEquals(100, state.getGold());
+        assertEquals(BlessingType.GOLD.id(), service.chosenOptionId());
+        assertEquals("获得了 " + BlessingService.GOLD_BONUS + " 金币。",
+                service.resultMessage());
     }
 
     @Test

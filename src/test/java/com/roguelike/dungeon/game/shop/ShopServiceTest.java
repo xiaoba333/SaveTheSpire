@@ -5,6 +5,9 @@ import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.Relic;
+import com.roguelike.dungeon.game.relic.RelicLibrary;
+import com.roguelike.dungeon.game.relic.RelicService;
 import com.roguelike.dungeon.game.run.RunState;
 import org.junit.jupiter.api.Test;
 
@@ -33,7 +36,41 @@ class ShopServiceTest {
         assertEquals(first, second);
         assertEquals(ShopService.MAX_CARD_ITEMS, first.size());
         assertEquals(first.size(), first.stream().map(item -> item.card().id()).distinct().count());
+        assertTrue(first.stream().noneMatch(ShopItem::isRelic));
         assertTrue(first.stream().allMatch(item -> item.price() == ShopService.CARD_PRICE));
+    }
+
+    @Test
+    void generateItemsWithPlayerShouldAppendRelicPricedSeventyFive() {
+        Player player = new Player(50, 3);
+        List<ShopItem> first = ShopService.generateItems(CARD_POOL, 12345L, player);
+        List<ShopItem> second = ShopService.generateItems(CARD_POOL, 12345L, player);
+
+        assertEquals(
+                first.stream().filter(item -> !item.isRelic()).map(item -> item.card().id()).toList(),
+                second.stream().filter(item -> !item.isRelic()).map(item -> item.card().id()).toList());
+        assertEquals(1, first.stream().filter(ShopItem::isRelic).count());
+        ShopItem relic = first.stream().filter(ShopItem::isRelic).findFirst().orElseThrow();
+        assertEquals(relic.relic().id(),
+                second.stream().filter(ShopItem::isRelic).findFirst().orElseThrow().relic().id());
+        assertEquals(ShopService.RELIC_PRICE, relic.price());
+        assertEquals("shop-relic-1", relic.id());
+    }
+
+    @Test
+    void buyingRelicShouldDeductGoldAndGrantRelic() {
+        RunState state = newRunState(100);
+        RelicService relicService = new RelicService(state.getPlayer(), line -> { });
+        Relic relic = RelicLibrary.create(RelicLibrary.WHETSTONE);
+        ShopItem item = ShopItem.ofRelic("relic-1", relic, ShopService.RELIC_PRICE);
+        ShopService service = new ShopService(
+                state, List.of(item), () -> "unused-id", result -> { }, relicService);
+
+        assertEquals(ShopActionResult.SUCCESS, service.buy(item.id()));
+        assertEquals(25, state.getGold());
+        assertTrue(state.getPlayer().hasRelicById(RelicLibrary.WHETSTONE));
+        assertTrue(service.getAvailableItems().isEmpty());
+        assertEquals(ShopActionResult.ITEM_ALREADY_SOLD, service.buy(item.id()));
     }
 
     @Test

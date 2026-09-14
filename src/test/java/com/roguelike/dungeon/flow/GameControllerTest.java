@@ -53,7 +53,11 @@ class GameControllerTest {
         completeOpeningBlessing(controller);
 
         assertEquals(GamePhase.MAP, controller.getPhase());
-        assertTrue(controller.getCurrentBlessingOptions().isEmpty());
+        assertTrue(controller.isBlessingResolved());
+        assertEquals(3, controller.getCurrentBlessingOptions().size());
+        assertFalse(controller.getChosenBlessingOptionId().isBlank());
+        assertThrows(IllegalStateException.class,
+                () -> controller.chooseBlessing(controller.getChosenBlessingOptionId()));
     }
 
     @Test
@@ -83,6 +87,8 @@ class GameControllerTest {
         assertEquals(GamePhase.REWARD, controller.getPhase());
         assertTrue(controller.getCurrentCombat().isEmpty());
         assertTrue(controller.getCurrentReward().isPresent());
+        assertFalse(controller.getCurrentReward().orElseThrow().hasRelic(),
+                "普通战斗不应掉落遗物");
         assertFalse(controller.getMapService().getCompletedNodeIds().contains(node.id()));
 
         int goldBeforeSkip = runState.getGold();
@@ -115,6 +121,45 @@ class GameControllerTest {
 
         assertEquals(26, player.getHealth());
         assertEquals(GamePhase.REWARD, controller.getPhase());
+    }
+
+    @Test
+    void eliteVictoryShouldOfferRelicReward() {
+        boolean foundElite = false;
+        for (long seed = 0; seed < 40 && !foundElite; seed++) {
+            RunState runState = new RunState(
+                    new Player(50, 3),
+                    List.of(new CardInstance("strike-1", CardLibrary.STRIKE)),
+                    0,
+                    seed,
+                    1);
+            GameController controller = controllerOnMap(runState, REWARD_POOL);
+            int safety = 0;
+            while (safety++ < 40 && controller.getPhase() == GamePhase.MAP) {
+                MapNode node = preferredNode(controller, MapNodeType.ELITE);
+                controller.selectNode(node.id());
+                if (controller.getPhase() != GamePhase.BATTLE) {
+                    controller.onLevelFinished(LevelResult.COMPLETED);
+                    continue;
+                }
+                controller.onLevelFinished(LevelResult.COMPLETED);
+                if (node.type() == MapNodeType.ELITE) {
+                    BattleReward reward = controller.getCurrentReward().orElseThrow();
+                    assertTrue(reward.hasRelic(), "精英战斗应掉落遗物，种子 " + seed);
+                    foundElite = true;
+                    break;
+                }
+                if (node.type() == MapNodeType.BATTLE) {
+                    assertFalse(controller.getCurrentReward().orElseThrow().hasRelic(),
+                            "普通战斗不应掉落遗物，种子 " + seed);
+                }
+                controller.skipRewardCard();
+                if (node.type() == MapNodeType.BOSS) {
+                    break;
+                }
+            }
+        }
+        assertTrue(foundElite, "40 个种子内应能走到精英房");
     }
 
     @Test
@@ -375,7 +420,15 @@ class GameControllerTest {
         int shopNodeId = controller.getCurrentNode().orElseThrow().id();
         int goldBefore = runState.getGold();
         int deckSizeBefore = runState.getDeck().size();
-        ShopItem item = controller.getCurrentShopItems().getFirst();
+        assertTrue(controller.getCurrentShopItems().stream().anyMatch(ShopItem::isRelic),
+                "商店应出售一件遗物");
+        assertTrue(controller.getCurrentShopItems().stream()
+                .filter(ShopItem::isRelic)
+                .allMatch(item -> item.price() == ShopService.RELIC_PRICE));
+        ShopItem item = controller.getCurrentShopItems().stream()
+                .filter(shopItem -> !shopItem.isRelic())
+                .findFirst()
+                .orElseThrow();
 
         assertEquals(ShopActionResult.SUCCESS, controller.buyShopItem(item.id()));
         assertEquals(goldBefore - item.price(), runState.getGold());
@@ -394,6 +447,13 @@ class GameControllerTest {
         assertEquals(GamePhase.MAP, controller.getPhase());
         assertTrue(controller.getMapService().getCompletedNodeIds().contains(shopNodeId));
         assertTrue(controller.getCurrentShopItems().isEmpty());
+    }
+
+    private static MapNode preferredNode(GameController controller, MapNodeType preferred) {
+        return controller.getMapService().getAvailableNodes().stream()
+                .filter(node -> node.type() == preferred)
+                .findFirst()
+                .orElseGet(() -> controller.getMapService().getAvailableNodes().getFirst());
     }
 
     private static void completeOneNode(GameController controller) {

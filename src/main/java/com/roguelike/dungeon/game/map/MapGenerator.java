@@ -2,10 +2,12 @@ package com.roguelike.dungeon.game.map;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 /** 创建可复现的基础关卡地图。 */
 public final class MapGenerator {
@@ -18,6 +20,9 @@ public final class MapGenerator {
     public static final int ELITE_COUNT = 3;
 
     private record PlacedNode(int id, int floor, int column, MapNodeType type) {
+        PlacedNode withType(MapNodeType newType) {
+            return new PlacedNode(id, floor, column, newType);
+        }
     }
 
     /**
@@ -34,28 +39,29 @@ public final class MapGenerator {
         for (int floor = 0; floor < FLOOR_COUNT; floor++) {
             List<PlacedNode> row = new ArrayList<>();
             for (int column : columnsByFloor.get(floor)) {
-                row.add(new PlacedNode(
-                        nextId++,
-                        floor,
-                        column,
-                        chooseType(floor, column, eliteColumns, random)));
+                row.add(new PlacedNode(nextId++, floor, column, MapNodeType.BATTLE));
             }
             floors.add(row);
         }
 
+        List<Map<Integer, List<Integer>>> outgoingByFloor = new ArrayList<>(FLOOR_COUNT);
+        for (int floor = 0; floor < FLOOR_COUNT - 1; floor++) {
+            outgoingByFloor.add(connect(floors.get(floor), floors.get(floor + 1), random));
+        }
+        outgoingByFloor.add(Map.of());
+
+        assignTypes(floors, outgoingByFloor, eliteColumns, random);
+
         List<MapNode> nodes = new ArrayList<>();
         for (int floor = 0; floor < FLOOR_COUNT; floor++) {
-            Map<Integer, List<Integer>> outgoing = floor == FLOOR_COUNT - 1
-                    ? Map.of()
-                    : connect(floors.get(floor), floors.get(floor + 1), random);
+            Map<Integer, List<Integer>> outgoing = outgoingByFloor.get(floor);
             for (PlacedNode placed : floors.get(floor)) {
-                List<Integer> nextNodeIds = outgoing.getOrDefault(placed.id(), List.of());
                 nodes.add(new MapNode(
                         placed.id(),
                         placed.floor(),
                         placed.column(),
                         placed.type(),
-                        nextNodeIds));
+                        outgoing.getOrDefault(placed.id(), List.of())));
             }
         }
         return new DungeonMap(nodes);
@@ -126,6 +132,43 @@ public final class MapGenerator {
             eliteColumns.put(floor, columns.get(random.nextInt(columns.size())));
         }
         return eliteColumns;
+    }
+
+    private static void assignTypes(
+            List<List<PlacedNode>> floors,
+            List<Map<Integer, List<Integer>>> outgoingByFloor,
+            Map<Integer, Integer> eliteColumns,
+            Random random) {
+        int restFloor = FLOOR_COUNT - 2;
+        for (int floor = 0; floor < FLOOR_COUNT; floor++) {
+            List<PlacedNode> typed = new ArrayList<>();
+            for (PlacedNode placed : floors.get(floor)) {
+                Set<MapNodeType> forbidden = EnumSet.noneOf(MapNodeType.class);
+                if (floor > 0) {
+                    Map<Integer, List<Integer>> incomingFromPrevious =
+                            outgoingByFloor.get(floor - 1);
+                    for (PlacedNode predecessor : floors.get(floor - 1)) {
+                        if (!incomingFromPrevious
+                                .getOrDefault(predecessor.id(), List.of())
+                                .contains(placed.id())) {
+                            continue;
+                        }
+                        if (predecessor.type() == MapNodeType.SHOP) {
+                            forbidden.add(MapNodeType.SHOP);
+                        }
+                        if (predecessor.type() == MapNodeType.REST) {
+                            forbidden.add(MapNodeType.REST);
+                        }
+                    }
+                }
+                if (floor + 1 == restFloor) {
+                    forbidden.add(MapNodeType.REST);
+                }
+                typed.add(placed.withType(chooseType(
+                        floor, placed.column(), eliteColumns, forbidden, random)));
+            }
+            floors.set(floor, typed);
+        }
     }
 
     private static Map<Integer, List<Integer>> connect(
@@ -201,6 +244,7 @@ public final class MapGenerator {
             int floor,
             int column,
             Map<Integer, Integer> eliteColumns,
+            Set<MapNodeType> forbidden,
             Random random) {
         if (floor == 0) {
             return MapNodeType.BATTLE;
@@ -215,13 +259,20 @@ public final class MapGenerator {
             return MapNodeType.ELITE;
         }
 
-        MapNodeType[] choices = {
+        List<MapNodeType> choices = new ArrayList<>();
+        for (MapNodeType candidate : List.of(
                 MapNodeType.BATTLE,
                 MapNodeType.BATTLE,
                 MapNodeType.EVENT,
                 MapNodeType.REST,
-                MapNodeType.SHOP
-        };
-        return choices[random.nextInt(choices.length)];
+                MapNodeType.SHOP)) {
+            if (!forbidden.contains(candidate)) {
+                choices.add(candidate);
+            }
+        }
+        if (choices.isEmpty()) {
+            return MapNodeType.BATTLE;
+        }
+        return choices.get(random.nextInt(choices.size()));
     }
 }

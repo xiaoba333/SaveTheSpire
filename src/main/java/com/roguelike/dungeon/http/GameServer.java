@@ -14,8 +14,10 @@ import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.character.CharacterDefinition;
 import com.roguelike.dungeon.game.character.GameCharacterCatalog;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.Relic;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
+import com.roguelike.dungeon.game.relic.RelicLibrary;
 import com.roguelike.dungeon.game.run.RunState;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -54,6 +56,8 @@ public final class GameServer {
                     "造成 6 点伤害。", "COMMON", CardLibrary.STRIKE),
             new ShopItem("c_heavy_strike", "重击", "CARD", 90,
                     "造成 12 点伤害。", "RARE", CardLibrary.HEAVY_STRIKE),
+            new ShopItem("whetstone", "磨刀石", "RELIC", 75,
+                    "你造成的伤害 +1。", "COMMON", null),
             new ShopItem("p_heal", "治疗药水", "POTION", 60,
                     "恢复 10 点生命。", null, null),
             new ShopItem("s_remove", "移除一张卡", "SERVICE", 75,
@@ -311,7 +315,7 @@ public final class GameServer {
     }
 
     private String blessingStateJson() {
-        if (controller.getPhase() != GamePhase.BLESSING) {
+        if (controller.getCurrentBlessingOptions().isEmpty()) {
             return GameStateJson.emptyBlessingJson();
         }
         return GameStateJson.blessingJson(
@@ -462,6 +466,14 @@ public final class GameServer {
         switch (item.kind()) {
             case "CARD" -> runState.addCard(
                     new CardInstance(UUID.randomUUID().toString(), item.card()));
+            case "RELIC" -> {
+                Relic relic = RelicLibrary.create(item.id());
+                if (!controller.getRelicService().acquire(relic)) {
+                    runState.addGold(item.price());
+                    sendError(ex, 400, "ITEM_SOLD", "已持有该遗物");
+                    return;
+                }
+            }
             case "POTION" -> runState.getPlayer().heal(10); // 治疗药水：恢复 10 点生命
             case "SERVICE" -> { /* 移除卡需要前端选卡，MVP 暂不结算 */ }
             default -> { }

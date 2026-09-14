@@ -4,6 +4,11 @@ import com.roguelike.dungeon.flow.LevelFinishHandler;
 import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
+import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.Relic;
+import com.roguelike.dungeon.game.entity.RelicRarity;
+import com.roguelike.dungeon.game.relic.RelicLibrary;
+import com.roguelike.dungeon.game.relic.RelicService;
 import com.roguelike.dungeon.game.run.RunState;
 
 import java.util.ArrayList;
@@ -22,28 +27,35 @@ import java.util.function.Supplier;
 public final class ShopService {
     public static final int MAX_CARD_ITEMS = 5;
     public static final int CARD_PRICE = 50;
+    public static final int RELIC_PRICE = 75;
     public static final int CARD_REMOVAL_PRICE = 75;
+
+    private static final RelicRarity[] SHOP_RELIC_RARITIES = {
+            RelicRarity.COMMON, RelicRarity.UNCOMMON, RelicRarity.RARE};
 
     private final RunState runState;
     private final Map<String, ShopItem> itemsById;
     private final Set<String> soldItemIds = new LinkedHashSet<>();
     private final Supplier<String> cardInstanceIdSupplier;
     private final LevelFinishHandler finishHandler;
+    private final RelicService relicService;
 
     private boolean cardRemovalUsed;
     private boolean closed;
 
-    /** 根据商店种子创建一个可复现的卡牌商店。 */
+    /** 根据商店种子创建一个可复现的卡牌+遗物商店。 */
     public ShopService(
             RunState runState,
             List<Card> cardPool,
             long shopSeed,
-            LevelFinishHandler finishHandler) {
+            LevelFinishHandler finishHandler,
+            RelicService relicService) {
         this(
                 runState,
-                generateItems(cardPool, shopSeed),
+                generateItems(cardPool, shopSeed, runState.getPlayer()),
                 () -> UUID.randomUUID().toString(),
-                finishHandler);
+                finishHandler,
+                relicService);
     }
 
     /** 供测试注入固定商品和卡牌实例编号。 */
@@ -52,16 +64,36 @@ public final class ShopService {
             List<ShopItem> items,
             Supplier<String> cardInstanceIdSupplier,
             LevelFinishHandler finishHandler) {
+        this(runState, items, cardInstanceIdSupplier, finishHandler, null);
+    }
+
+    ShopService(
+            RunState runState,
+            List<ShopItem> items,
+            Supplier<String> cardInstanceIdSupplier,
+            LevelFinishHandler finishHandler,
+            RelicService relicService) {
         this.runState = Objects.requireNonNull(runState, "单局状态不能为 null");
         this.cardInstanceIdSupplier = Objects.requireNonNull(
                 cardInstanceIdSupplier, "卡牌实例编号生成器不能为 null");
         this.finishHandler = Objects.requireNonNull(
                 finishHandler, "关卡结束处理器不能为 null");
+        this.relicService = relicService;
         this.itemsById = indexItems(items);
     }
 
     /** 从卡池中确定性地抽取最多五张不同定义的卡牌。 */
     public static List<ShopItem> generateItems(List<Card> cardPool, long shopSeed) {
+        return generateItems(cardPool, shopSeed, null);
+    }
+
+    /**
+     * 抽取最多五张卡牌，并在玩家尚未持有可售遗物时追加一件 75 金币的遗物。
+     */
+    public static List<ShopItem> generateItems(
+            List<Card> cardPool,
+            long shopSeed,
+            Player player) {
         Objects.requireNonNull(cardPool, "商店卡池不能为 null");
         Map<String, Card> uniqueCards = new LinkedHashMap<>();
         for (Card card : cardPool) {
@@ -75,11 +107,24 @@ public final class ShopService {
         List<Card> shuffled = new ArrayList<>(uniqueCards.values());
         Collections.shuffle(shuffled, new Random(shopSeed));
         int count = Math.min(MAX_CARD_ITEMS, shuffled.size());
-        List<ShopItem> items = new ArrayList<>(count);
+        List<ShopItem> items = new ArrayList<>(count + 1);
         for (int i = 0; i < count; i++) {
             items.add(new ShopItem("shop-card-" + (i + 1), shuffled.get(i), CARD_PRICE));
         }
+        if (player != null) {
+            RelicLibrary.randomReward(
+                            relicShopSeed(shopSeed),
+                            player,
+                            SHOP_RELIC_RARITIES)
+                    .ifPresent(relic -> items.add(
+                            ShopItem.ofRelic("shop-relic-1", relic, RELIC_PRICE)));
+        }
         return List.copyOf(items);
+    }
+
+    /** 遗物货架使用与卡牌不同的种子偏移，避免总是和第一张卡同步变化。 */
+    private static long relicShopSeed(long shopSeed) {
+        return shopSeed * 31 + 0xC0FFEEL;
     }
 
     /** 返回尚未售出的商品快照。 */
@@ -102,7 +147,7 @@ public final class ShopService {
         return closed;
     }
 
-    /** 购买一个卡牌商品。购买成功后卡牌进入永久牌组。 */
+    /** 购买一个卡牌或遗物商品。 */
     public ShopActionResult buy(String itemId) {
         if (closed) {
             return ShopActionResult.SHOP_CLOSED;
@@ -117,7 +162,10 @@ public final class ShopService {
         if (runState.getGold() < item.price()) {
             return ShopActionResult.INSUFFICIENT_GOLD;
         }
+        return item.isRelic() ? buyRelic(item) : buyCard(item);
+    }
 
+    private ShopActionResult buyCard(ShopItem item) {
         String cardInstanceId = Objects.requireNonNull(
                 cardInstanceIdSupplier.get(), "生成的卡牌实例编号不能为 null");
         if (cardInstanceId.isBlank()) {
@@ -129,7 +177,26 @@ public final class ShopService {
             runState.removeCard(cardInstanceId);
             return ShopActionResult.INSUFFICIENT_GOLD;
         }
-        soldItemIds.add(itemId);
+        soldItemIds.add(item.id());
+        return ShopActionResult.SUCCESS;
+    }
+
+    private ShopActionResult buyRelic(ShopItem item) {
+        if (relicService == null) {
+            return ShopActionResult.ITEM_NOT_FOUND;
+        }
+        Relic relic = item.relic();
+        if (runState.getPlayer().hasRelicById(relic.id())) {
+            return ShopActionResult.ITEM_ALREADY_SOLD;
+        }
+        if (!runState.spendGold(item.price())) {
+            return ShopActionResult.INSUFFICIENT_GOLD;
+        }
+        if (!relicService.acquire(relic)) {
+            runState.addGold(item.price());
+            return ShopActionResult.ITEM_ALREADY_SOLD;
+        }
+        soldItemIds.add(item.id());
         return ShopActionResult.SUCCESS;
     }
 

@@ -7,7 +7,7 @@ import com.roguelike.dungeon.game.card.Card;
  *
  * @param id 商品编号（前端购买时回传）
  * @param name 显示名
- * @param kind 商品类型：CARD / POTION / SERVICE
+ * @param kind 商品类型：CARD / RELIC / POTION / SERVICE
  * @param price 价格（金币）
  * @param description 效果说明
  * @param rarity 卡牌稀有度（仅 CARD 类型；非卡牌为 null）

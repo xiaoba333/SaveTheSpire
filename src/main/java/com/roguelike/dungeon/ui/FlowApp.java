@@ -41,6 +41,7 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundImage;
 import javafx.scene.layout.BackgroundPosition;
@@ -88,6 +89,7 @@ public class FlowApp extends Application {
     private GameController controller;
     private String pendingForgeCardId;
     private boolean pickingSmithCard;
+    private boolean viewingOpeningRoom;
 
     @Override
     public void start(Stage stage) {
@@ -144,6 +146,12 @@ public class FlowApp extends Application {
 
         resetToTitle();
 
+        scene.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ESCAPE) {
+                handleBack();
+            }
+        });
+
         stage.setTitle("Save the Spire");
         stage.setScene(scene);
         stage.show();
@@ -194,6 +202,7 @@ public class FlowApp extends Application {
         controller = null;
         pendingForgeCardId = null;
         pickingSmithCard = false;
+        viewingOpeningRoom = false;
         logArea.clear();
         showFlowUi();
         titleLayer.setVisible(true);
@@ -255,11 +264,19 @@ public class FlowApp extends Application {
             pickingSmithCard = false;
         }
         if (controller.getPhase() == GamePhase.BATTLE) {
+            viewingOpeningRoom = false;
             Combat combat = controller.getCurrentCombat().orElseThrow();
             showBattleUi(combat);
             return;
         }
+        if (controller == null || controller.getPhase() != GamePhase.MAP) {
+            viewingOpeningRoom = false;
+        }
         showFlowUi();
+        if (viewingOpeningRoom) {
+            renderBlessing();
+            return;
+        }
         switch (controller.getPhase()) {
             case BLESSING -> renderBlessing();
             case MAP -> renderMap();
@@ -336,34 +353,73 @@ public class FlowApp extends Application {
         }
     }
 
+    private void handleBack() {
+        if (titleLayer.isVisible()) {
+            return;
+        }
+        if (controller == null) {
+            resetToTitle();
+            return;
+        }
+        if (viewingOpeningRoom) {
+            viewingOpeningRoom = false;
+            render();
+            return;
+        }
+        if (controller.getPhase() == GamePhase.MAP && controller.isBlessingResolved()) {
+            viewingOpeningRoom = true;
+            render();
+        }
+    }
+
     private void renderBlessing() {
         titleLabel.setText(BlessingService.TITLE);
         statusLabel.setText(runSummary(controller.getRunState()));
-        if (controller.isBlessingAwaitingCard()) {
+        boolean reviewOnly = controller.isBlessingResolved();
+        if (!reviewOnly && controller.isBlessingAwaitingCard()) {
             hintLabel.setText("选择一张永久牌组中的卡。");
             renderBlessingCardChoices();
             return;
         }
-        hintLabel.setText("从三个选项中选一个，然后进入地图。");
+        hintLabel.setText(reviewOnly
+                ? "馈赠已经带走。按 Esc 或点「回到地图」继续。"
+                : "从三个选项中选一个，然后进入地图。");
         StringBuilder body = new StringBuilder(BlessingService.DESCRIPTION).append("\n\n");
+        String chosenId = controller.getChosenBlessingOptionId();
         for (BlessingOption option : controller.getCurrentBlessingOptions()) {
-            body.append("- ").append(option.label())
+            boolean chosen = reviewOnly && option.id().equals(chosenId);
+            body.append(chosen ? "★ " : "- ").append(option.label())
                     .append(" | ").append(option.description());
-            if (!option.available()) {
+            if (chosen) {
+                body.append("  ← 已带走");
+            } else if (!option.available()) {
                 body.append("（不可选：").append(option.unavailableReason()).append("）");
             }
             body.append('\n');
-            Button button = new Button(option.label());
-            button.setDisable(!option.available());
-            button.setTooltip(new Tooltip(option.available()
-                    ? option.description()
-                    : option.unavailableReason()));
-            button.setOnAction(event -> {
-                BlessingActionResult result = controller.chooseBlessing(option.id());
-                log(result.message());
+            if (!reviewOnly) {
+                Button button = new Button(option.label());
+                button.setDisable(!option.available());
+                button.setTooltip(new Tooltip(option.available()
+                        ? option.description()
+                        : option.unavailableReason()));
+                button.setOnAction(event -> {
+                    BlessingActionResult result = controller.chooseBlessing(option.id());
+                    log(result.message());
+                    render();
+                });
+                actionBox.getChildren().add(button);
+            }
+        }
+        if (reviewOnly) {
+            if (!controller.getBlessingResultMessage().isBlank()) {
+                body.append("\n").append(controller.getBlessingResultMessage()).append('\n');
+            }
+            Button backToMap = new Button("回到地图");
+            backToMap.setOnAction(event -> {
+                viewingOpeningRoom = false;
                 render();
             });
-            actionBox.getChildren().add(button);
+            actionBox.getChildren().add(backToMap);
         }
         bodyArea.setText(body.toString());
     }
@@ -401,7 +457,7 @@ public class FlowApp extends Application {
         titleLabel.setText("地图 · 第 " + state.getCurrentAct() + " / "
                 + state.getTotalActs() + " 章");
         statusLabel.setText(runSummary(state));
-        hintLabel.setText("点击可选节点进入。");
+        hintLabel.setText("点击可选节点进入。Esc 或「返回开局房间」可回看已领取的馈赠。");
         bodyArea.setText(mapRenderer.render(controller.getMapService()));
         bodyArea.appendText("\n可选节点：\n");
         List<MapNode> nodes = controller.getMapService().getAvailableNodes();
@@ -420,6 +476,14 @@ public class FlowApp extends Application {
                 }
             });
             actionBox.getChildren().add(button);
+        }
+        if (controller.isBlessingResolved()) {
+            Button backToRoom = new Button("返回开局房间");
+            backToRoom.setOnAction(event -> {
+                viewingOpeningRoom = true;
+                render();
+            });
+            actionBox.getChildren().add(backToRoom);
         }
     }
 
@@ -641,23 +705,26 @@ public class FlowApp extends Application {
         RunState state = controller.getRunState();
         titleLabel.setText("商店");
         statusLabel.setText(runSummary(state));
-        hintLabel.setText("购买卡牌或删除一张永久牌组中的牌，然后离开商店。");
+        hintLabel.setText("购买卡牌或遗物，或删除一张永久牌组中的牌，然后离开商店。");
         List<ShopItem> items = controller.getCurrentShopItems();
         List<CardInstance> removable = controller.getShopRemovableCards();
-        StringBuilder body = new StringBuilder("卡牌商品（每张 ")
-                .append(ShopService.CARD_PRICE).append(" 金币）：\n");
+        StringBuilder body = new StringBuilder("商品（卡牌 ")
+                .append(ShopService.CARD_PRICE)
+                .append(" 金 / 遗物 ")
+                .append(ShopService.RELIC_PRICE)
+                .append(" 金）：\n");
         if (items.isEmpty()) {
             body.append("  （已售罄）\n");
         }
         for (ShopItem item : items) {
-            body.append("  ").append(item.card().label())
-                    .append(" | ").append(item.card().description()).append('\n');
-            Button buy = new Button("买 " + item.card().name() + "（" + item.price() + "）");
-            buy.setTooltip(new Tooltip(item.card().description()));
+            body.append("  ").append(item.displayLabel())
+                    .append(" | ").append(item.displayDescription()).append('\n');
+            Button buy = new Button("买 " + item.displayName() + "（" + item.price() + "）");
+            buy.setTooltip(new Tooltip(item.displayDescription()));
             buy.setOnAction(event -> {
                 ShopActionResult result = controller.buyShopItem(item.id());
                 log(result == ShopActionResult.SUCCESS
-                        ? "购买成功：" + item.card().name()
+                        ? "购买成功：" + item.displayName()
                         : "购买失败：" + shopResultText(result));
                 render();
             });
