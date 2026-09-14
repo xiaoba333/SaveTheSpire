@@ -384,6 +384,21 @@ public class Combat {
                 .toList();
     }
 
+    /**
+     * 抽牌堆的牌实例快照，供 HTTP 层序列化「查看抽牌堆」界面用。
+     *
+     * <p>与 {@link #getDrawPile()} 的区别：那个只给出卡牌定义，升级信息会丢；
+     * 界面要显示升级后的名称/费用/说明，所以这里给实例。下一张在列表末尾。</p>
+     */
+    public List<CardInstance> getDrawPileInstances() {
+        return List.copyOf(state.getPiles().getDrawPile());
+    }
+
+    /** 弃牌堆的牌实例快照，供 HTTP 层序列化「查看弃牌堆」界面用。最近弃入的在列表末尾。 */
+    public List<CardInstance> getDiscardPileInstances() {
+        return List.copyOf(state.getPiles().getDiscardPile());
+    }
+
     /** 界面展示怪物下一动，方便看清攻防循环。 */
     public String getMonsterIntent() {
         return monsterAi.intentText(state);

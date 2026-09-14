@@ -51,6 +51,7 @@
 | `POST` | `/api/v1/battles/{battleId}/play` | 打出手牌中某张牌（按 cardId，可选带目标） |
 | `POST` | `/api/v1/battles/{battleId}/end-turn` | 玩家结束回合（后端同步执行怪物行动） |
 | `GET`  | `/api/v1/battles/{battleId}` | 查询当前战斗状态（重连 / 刷新用） |
+| `GET`  | `/api/v1/battles/{battleId}/piles` | 查看抽牌堆 / 弃牌堆的牌面内容（点开牌堆时按需拉取） |
 
 > 每次操作接口都返回完整 `BattleState`，Unity 拿到响应直接整屏刷新。
 
@@ -109,13 +110,23 @@
 | `hp` / `maxHp` | int | 当前 / 上限生命 |
 | `armor` | int | 当前护甲 |
 | `energy` / `maxEnergy` | int? | 仅玩家有，敌人返回 `0` |
-| `intent` | Intent? | 仅敌人有，玩家返回 `null` |
+| `intent` | Intent? | 仅敌人有，玩家返回 `null`。`{type, value}` 见下表 |
 | `index` | int? | **仅敌人**。敌人下标，传给 `/target` 或 `play` 的 `targetIndex` |
 | `id` | string? | **仅敌人**。怪物定义 id，用于取立绘；也可作为 `targetId` |
 | `name` | string? | **仅敌人**。显示名，同名敌人靠 `index` 区分 |
 | `strength` | int? | **仅敌人**。当前力量（含状态加成） |
 | `alive` | bool? | **仅敌人**。是否存活；死亡的敌人不能再被选为目标 |
 | `targeted` | bool? | **仅敌人**。是否为玩家当前锁定的攻击目标，前端据此高亮 |
+
+#### intent 的两个字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | string | `ATTACK` / `DEFEND` / `ATTACK_DEBUFF` / `DEFEND_BUFF` / `BUFF` / `DEBUFF` / `HEAL` / `SPECIAL` / `UNKNOWN`。脚本怪 AI 目前把组合意图塌缩成 `ATTACK` / `DEFEND` |
+| `value` | int | 叠在意图图标上的数字：攻击是**伤害（含力量）**、防御是格挡量、削弱是层数、回复是回血量。**0 表示没有数字可显示**，前端不画（不是「显示 0」） |
+
+> `value` 2026-09-14 之前恒为 0（脚本怪 AI 的 `IntentSnapshot` 硬编码），所以前端那排意图数字一直不显示。
+> 现在由 `MonsterAi.snapshotOf` 从意图自身声明的 `Intent.amount()` 取值，攻击再补上怪物当前力量。
 
 ### 3.3 CardInstance（手牌中的一张牌实例）
 
@@ -232,6 +243,24 @@ POST /api/v1/battles/{battleId}/end-turn
 GET /api/v1/battles/{battleId}
 响应 200：BattleState
 ```
+
+### 4.6 查看牌堆内容
+
+```
+GET /api/v1/battles/{battleId}/piles
+响应 200：
+{
+  "draw":    [ CardInstance, ... ],
+  "discard": [ CardInstance, ... ]
+}
+```
+
+`BattleState.piles` 只带三个堆的**数量**——每出一张牌都会拉一次战斗状态，把整堆牌都塞进去是白白的流量。
+牌面内容只在玩家点开堆的时候用这个端点单独取一次，元素与手牌同构（见 §4.1 的 card 字段）。
+
+顺序：`draw` 的下一张在数组末尾，`discard` 最近弃入的在数组末尾。
+
+错误：战斗编号不存在或已过期 → `404`，体为 `{"code":"BATTLE_NOT_FOUND","message":"战斗不存在或已过期"}`（与 `/play`、`/end-turn` 同一套）。
 
 ---
 

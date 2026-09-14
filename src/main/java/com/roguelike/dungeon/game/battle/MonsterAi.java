@@ -1,6 +1,7 @@
 package com.roguelike.dungeon.game.battle;
 
 import com.roguelike.dungeon.game.enemy.Monster;
+import com.roguelike.dungeon.game.enemy.intent.Intent;
 
 /**
  * 怪物 AI：决定怪物每回合的意图与行动。
@@ -72,6 +73,39 @@ public interface MonsterAi {
 
     /** 怪物意图快照。 */
     record IntentSnapshot(String type, int value) {
+    }
+
+    /**
+     * 由怪物当前计划意图生成 UI 快照，给脚本怪 AI 用（{@link ScriptedMonsterAi}、
+     * {@link MonsterEncounterAi} 以前各写一份、都把 value 硬编码成 0，于是前端那排意图数字一直不显示）。
+     *
+     * <p>数字取 {@link Intent#amount()}（意图自己声明的：攻击是伤害、防御是格挡量、削弱是层数）；
+     * 攻击类再补上怪物当前的力量，因为实际打出来就是 {@code 基础伤害 + 力量}（见 Intents.attack）。
+     * 0 表示没有数字可显示，前端据此不画。</p>
+     *
+     * <p>类型这里仍按老规矩塌缩：ATTACK_DEBUFF → "ATTACK"、DEFEND_BUFF → "DEFEND"，
+     * 其余用枚举名。前端的图标表两种都认，塌缩是为了不改变现网行为。</p>
+     *
+     * @return 意图为空或怪物已死时返回 null（前端隐藏意图）
+     */
+    static IntentSnapshot snapshotOf(Monster monster) {
+        if (monster == null || monster.isDead()) {
+            return null;
+        }
+        Intent intent = monster.plannedIntent();
+        if (intent == null) {
+            return null;
+        }
+        int value = switch (intent.type()) {
+            case ATTACK, ATTACK_DEBUFF -> intent.amount() + monster.getStrength();
+            default -> intent.amount();
+        };
+        String type = switch (intent.type()) {
+            case ATTACK, ATTACK_DEBUFF -> "ATTACK";
+            case DEFEND, DEFEND_BUFF -> "DEFEND";
+            default -> intent.type().name();
+        };
+        return new IntentSnapshot(type, value);
     }
 
     /** 一回合怪物行动结果。 */
