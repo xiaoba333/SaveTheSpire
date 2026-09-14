@@ -27,17 +27,60 @@ class MapGeneratorTest {
         DungeonMap map = new MapGenerator().generate(12345L);
 
         assertEquals(MapGenerator.FLOOR_COUNT - 1, map.getMaxFloor());
+        int startWidth = map.getStartingNodes().size();
+        assertTrue(startWidth >= MapGenerator.MIN_FLOOR_WIDTH && startWidth <= 3);
         for (int floor = 0; floor < MapGenerator.FLOOR_COUNT - 1; floor++) {
-            assertEquals(MapGenerator.COLUMN_COUNT, map.getNodesOnFloor(floor).size());
+            int width = map.getNodesOnFloor(floor).size();
+            assertTrue(width >= MapGenerator.MIN_FLOOR_WIDTH
+                            && width <= MapGenerator.MAX_FLOOR_WIDTH,
+                    "第 " + floor + " 层房间数 " + width);
         }
         assertEquals(1, map.getNodesOnFloor(MapGenerator.FLOOR_COUNT - 1).size());
+        int restWidth = map.getNodesOnFloor(MapGenerator.FLOOR_COUNT - 2).size();
+        assertTrue(restWidth >= MapGenerator.MIN_FLOOR_WIDTH && restWidth <= 3);
+    }
+
+    @Test
+    void adjacentFloorsShouldChangeWidthByAtMostOne() {
+        for (long seed = 0; seed < 50; seed++) {
+            DungeonMap map = new MapGenerator().generate(seed);
+            int previousWidth = map.getNodesOnFloor(0).size();
+            for (int floor = 1; floor < MapGenerator.FLOOR_COUNT - 1; floor++) {
+                int width = map.getNodesOnFloor(floor).size();
+                assertTrue(Math.abs(width - previousWidth) <= 1,
+                        "种子 " + seed + " 第 " + floor + " 层从 "
+                                + previousWidth + " 间变成 " + width + " 间");
+                previousWidth = width;
+            }
+        }
+    }
+
+    @Test
+    void someSeedsShouldWidenAndNarrow() {
+        boolean sawWide = false;
+        boolean sawNarrow = false;
+        for (long seed = 0; seed < 50; seed++) {
+            DungeonMap map = new MapGenerator().generate(seed);
+            for (int floor = 0; floor < MapGenerator.FLOOR_COUNT - 1; floor++) {
+                int width = map.getNodesOnFloor(floor).size();
+                if (width >= 4) {
+                    sawWide = true;
+                }
+                if (width == MapGenerator.MIN_FLOOR_WIDTH) {
+                    sawNarrow = true;
+                }
+            }
+        }
+        assertTrue(sawWide, "50 个种子里应出现至少一层 4 间或更宽");
+        assertTrue(sawNarrow, "50 个种子里应出现至少一层只有 2 间");
     }
 
     @Test
     void startingFloorShouldContainOnlyBattleNodes() {
         DungeonMap map = new MapGenerator().generate(12345L);
 
-        assertEquals(MapGenerator.COLUMN_COUNT, map.getStartingNodes().size());
+        int startWidth = map.getStartingNodes().size();
+        assertTrue(startWidth >= MapGenerator.MIN_FLOOR_WIDTH && startWidth <= 3);
         assertTrue(map.getStartingNodes().stream()
                 .allMatch(node -> node.type() == MapNodeType.BATTLE));
     }
@@ -56,27 +99,31 @@ class MapGeneratorTest {
 
     @Test
     void everyConnectionShouldLeadToExistingNodeOnNextFloor() {
-        DungeonMap map = new MapGenerator().generate(12345L);
+        for (long seed = 0; seed < 50; seed++) {
+            DungeonMap map = new MapGenerator().generate(seed);
 
-        for (MapNode node : map.getNodes()) {
-            if (node.type() != MapNodeType.BOSS) {
-                assertFalse(node.nextNodeIds().isEmpty());
-            }
+            for (MapNode node : map.getNodes()) {
+                if (node.type() != MapNodeType.BOSS) {
+                    assertFalse(node.nextNodeIds().isEmpty(), "种子 " + seed);
+                }
 
-            for (int nextNodeId : node.nextNodeIds()) {
-                MapNode target = map.getNode(nextNodeId);
-                assertEquals(node.floor() + 1, target.floor());
+                for (int nextNodeId : node.nextNodeIds()) {
+                    MapNode target = map.getNode(nextNodeId);
+                    assertEquals(node.floor() + 1, target.floor(), "种子 " + seed);
+                }
             }
         }
     }
 
     @Test
     void everyGeneratedNodeShouldBeReachableFromStartingFloor() {
-        DungeonMap map = new MapGenerator().generate(12345L);
-        Set<Integer> reachableNodeIds = new HashSet<>();
-        map.getStartingNodes().forEach(node -> visit(map, node, reachableNodeIds));
+        for (long seed = 0; seed < 50; seed++) {
+            DungeonMap map = new MapGenerator().generate(seed);
+            Set<Integer> reachableNodeIds = new HashSet<>();
+            map.getStartingNodes().forEach(node -> visit(map, node, reachableNodeIds));
 
-        assertEquals(map.getNodes().size(), reachableNodeIds.size());
+            assertEquals(map.getNodes().size(), reachableNodeIds.size(), "种子 " + seed);
+        }
     }
 
     @Test
