@@ -1,6 +1,7 @@
 package com.roguelike.dungeon.http;
 
 import com.roguelike.dungeon.game.blessing.BlessingOption;
+import com.roguelike.dungeon.game.campfire.CampfireAction;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.character.CharacterDefinition;

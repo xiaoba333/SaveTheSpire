@@ -8,6 +8,7 @@ import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
 import com.roguelike.dungeon.game.blessing.BlessingActionResult;
 import com.roguelike.dungeon.game.blessing.BlessingService;
+import com.roguelike.dungeon.game.campfire.CampfireActionResult;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.character.CharacterDefinition;
@@ -44,6 +45,7 @@ public final class GameServer {
 
     private static final String PREFIX_BATTLES = "/api/v1/battles";
 
+    /** 未显式指定 actCount 时的章节数；至少 2 章，才能在打完第一章 Boss 后进入下一层。 */
     private static final int DEFAULT_ACT_COUNT = 2;
 
     /** 固定商店库存（MVP）。 */

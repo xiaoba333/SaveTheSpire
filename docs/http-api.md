@@ -265,26 +265,39 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET`  | `/api/v1/characters` | 列出可选角色（不含隐藏角色 god） |
-| `POST` | `/api/v1/runs` | 按角色开一局；可重复调用以重开 |
+| `POST` | `/api/v1/game/start` | 用选中角色开局（前端选角界面入口，请求体只需 `characterId`） |
+| `POST` | `/api/v1/runs` | 同上，另可传 `seed` / `actCount` 复现同一局；可重复调用以重开 |
 | `GET`  | `/api/v1/runs` | 查询当前局阶段和角色状态 |
 | `GET`  | `/api/v1/map` | 拉取整张地图 |
-| `POST` | `/api/v1/map/advance` | 推进节点（战斗类=进入，非战斗类=进入+结算） |
+| `POST` | `/api/v1/map/advance` | 进入节点（任意类型都只「进入」，结算见 7.1） |
 | `GET`  | `/api/v1/blessing` | 拉取开局房间三个馈赠 |
 | `POST` | `/api/v1/blessing/choose` | 选择馈赠（删卡/升级时附带 cardId） |
+| `GET`  | `/api/v1/reward` | 拉取当前战斗奖励 |
 | `POST` | `/api/v1/reward/select` | 选择一张奖励卡（cardId=null 表示跳过） |
-| `GET`  | `/api/v1/shop` | 拉取商店状态 |
+| `GET`  | `/api/v1/shop` | 拉取商店状态（含可删卡列表与删卡价） |
 | `POST` | `/api/v1/shop/buy` | 购买一件商品 |
-| `GET`  | `/api/v1/event` | 拉取当前事件 |
-| `POST` | `/api/v1/event/choose` | 结算事件选项（choiceId=null 表示离开） |
+| `POST` | `/api/v1/shop/remove` | 删除牌组中一张卡（`cardId`=牌组卡实例 id） |
+| `POST` | `/api/v1/shop/leave` | 离开商店并结算节点，返回最新地图 |
+| `GET`  | `/api/v1/event` | 拉取当前事件与选项 |
+| `POST` | `/api/v1/event/choose` | 结算事件选项（choiceId=null 视作 `leave`），返回最新地图 |
+| `GET`  | `/api/v1/campfire` | 拉取篝火操作与可锻造卡牌 |
+| `POST` | `/api/v1/campfire/act` | 执行篝火操作（`actionId`=rest/smith/leave），返回最新地图 |
 | `GET`  | `/api/v1/deck` | 拉取当前牌组 |
 | `GET`  | `/api/v1/character` | 拉取角色状态 |
 
 ### 7.1 地图推进语义（关键）
 
-前端 `map.Advance(nodeId)` 在不同节点类型下语义不同：
+`map/advance` 对**任意节点类型都只做「进入」**（后端 `GameController.selectNode`，由它按节点类型切到
+战斗 / 事件 / 商店 / 休息阶段）；随后由各自的结算端点离开节点、统一回到地图阶段：
 
-- **BATTLE / ELITE / BOSS**：`advance` 即「进入节点」，后端 `selectNode` 立即启动战斗；随后前端再调 `POST /battles` 取当前战斗。
-- **EVENT / SHOP / REST**：`advance` 只在结算后调用一次，后端按「进入 + 完成」一次性结算并回到地图阶段。
+- **BATTLE / ELITE / BOSS**：`advance` 进入即开战，随后前端调 `POST /battles` 取当前战斗；战斗结束走 `reward/*`。
+- **EVENT**：`advance` 进入后 `GET /event` 取事件与选项，`POST /event/choose` 结算。
+- **SHOP**：`advance` 进入后 `GET /shop`，用 `shop/buy`、`shop/remove` 操作，`shop/leave` 离开。
+- **REST（篝火）**：`advance` 进入后 `GET /campfire`，用 `campfire/act`（rest=回复 / smith=锻造升级 / leave=直接离开）结算。
+
+即「**进入**」与「**结算**」分离：进入只切阶段、不动地图进度；结算端点负责推进节点并把地图状态回给前端。
+
+开局选角后阶段为 `BLESSING`，先 `GET /blessing` 再 `POST /blessing/choose`，完成后才进入地图。
 
 节点 `id` 为**数字字符串**（如 `"0"`），`type` 用大写（`BATTLE/ELITE/EVENT/SHOP/REST/BOSS`），
 `state` 为 `LOCKED/SELECTABLE/CURRENT/PASSED`，`column`=层（0 在下、Boss 在最上）、`row`=同层横向位置。

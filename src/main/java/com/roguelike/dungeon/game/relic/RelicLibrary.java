@@ -55,6 +55,11 @@ public final class RelicLibrary {
     public static final String GREEDY_CUP = "greedy_cup";
     public static final String DARK_PACT = "dark_pact";
     public static final String TOWER_KEY = "tower_key";
+    public static final String CRIMSON_CROWN = "crimson_crown";
+    public static final String LEVIATHAN_HEART = "leviathan_heart";
+    public static final String AEGIS_OF_RUIN = "aegis_of_ruin";
+    public static final String SOULBOUND_LEDGER = "soulbound_ledger";
+    public static final String DOOMSDAY_CLOCK = "doomsday_clock";
 
     /**
      * 每局固定获得的初始遗物。
@@ -240,6 +245,80 @@ public final class RelicLibrary {
                 Set.of(),
                 (trigger, ctx) -> {
                     // 占位遗物：目前没有战斗效果。
+                }));
+
+        register(CRIMSON_CROWN, () -> new SimpleRelic(CRIMSON_CROWN, "猩红王冠",
+                "你造成的伤害 +35%；每场战斗开始时失去 20% 当前生命。", RelicRarity.BOSS,
+                Set.of(RelicTrigger.DAMAGE_DEALT, RelicTrigger.BATTLE_START),
+                (trigger, ctx) -> {
+                    if (trigger == RelicTrigger.DAMAGE_DEALT) {
+                        ctx.multiplyValue(1.35);
+                        return;
+                    }
+                    int before = ctx.player().getHealth();
+                    int after = Math.max(1, before * 4 / 5);
+                    ctx.player().setHealth(after);
+                    if (before > after) {
+                        ctx.log("「猩红王冠」代价：失去 " + (before - after) + " 点生命。");
+                    }
+                }));
+
+        register(LEVIATHAN_HEART, () -> new SimpleRelic(LEVIATHAN_HEART, "利维坦之心",
+                "获得时：最大生命 +30 并回满生命；每回合结束时失去 2 点生命。", RelicRarity.BOSS,
+                Set.of(RelicTrigger.OBTAIN, RelicTrigger.TURN_END),
+                (trigger, ctx) -> {
+                    if (trigger == RelicTrigger.OBTAIN) {
+                        ctx.player().increaseMaxHealth(30);
+                        ctx.player().healToFull();
+                        ctx.log("「利维坦之心」触发：最大生命 +30 并回满生命。");
+                        return;
+                    }
+                    int before = ctx.player().getHealth();
+                    int after = Math.max(1, before - 2);
+                    ctx.player().setHealth(after);
+                    if (before > after) {
+                        ctx.log("「利维坦之心」代价：失去 2 点生命。");
+                    }
+                }));
+
+        register(AEGIS_OF_RUIN, () -> new SimpleRelic(AEGIS_OF_RUIN, "废墟之盾",
+                "每回合开始时获得 6 点护甲；你造成的伤害 -20%。", RelicRarity.BOSS,
+                Set.of(RelicTrigger.TURN_START, RelicTrigger.DAMAGE_DEALT),
+                (trigger, ctx) -> {
+                    if (trigger == RelicTrigger.TURN_START) {
+                        ctx.player().addArmor(6);
+                        ctx.log("「废墟之盾」触发：获得 6 点护甲。");
+                        return;
+                    }
+                    ctx.multiplyValue(0.8);
+                }));
+
+        register(SOULBOUND_LEDGER, () -> new SimpleRelic(SOULBOUND_LEDGER, "缚魂账簿",
+                "每场战斗胜利后最大生命 +5；每场战斗开始时最大生命 -2。", RelicRarity.BOSS,
+                Set.of(RelicTrigger.BATTLE_START, RelicTrigger.BATTLE_END),
+                (trigger, ctx) -> {
+                    if (trigger == RelicTrigger.BATTLE_START) {
+                        ctx.player().reduceMaxHealth(2);
+                        ctx.log("「缚魂账簿」代价：最大生命 -2。");
+                        return;
+                    }
+                    ctx.player().increaseMaxHealth(5);
+                    ctx.log("「缚魂账簿」触发：最大生命 +5。");
+                }));
+
+        register(DOOMSDAY_CLOCK, () -> new SimpleRelic(DOOMSDAY_CLOCK, "末日之钟",
+                "每第 3 个回合，你造成的伤害 ×2；其余回合 ×0.6。", RelicRarity.BOSS,
+                Set.of(RelicTrigger.DAMAGE_DEALT),
+                (trigger, ctx) -> {
+                    if (ctx.battle() == null) {
+                        return;
+                    }
+                    if (ctx.battle().turnNumber() % 3 == 0) {
+                        ctx.multiplyValue(2.0);
+                        ctx.log("「末日之钟」触发：本回合伤害翻倍。");
+                    } else {
+                        ctx.multiplyValue(0.6);
+                    }
                 }));
     }
 
