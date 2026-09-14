@@ -117,6 +117,20 @@ public final class GameServer {
         return controller;
     }
 
+    /**
+     * 开局房间接口（{@code /api/v1/blessing*}）的守卫：没有进行中的对局时
+     * 回 400 并返回 false。
+     *
+     * <p><b>补丁说明</b>：dev 的 {@code handleBlessing} / {@code handleChooseBlessing}
+     * 一直在调用 {@code requireRun(ex)}，但当前 dev 树里没有任何地方定义它
+     * （javac 报「找不到符号: 方法 requireRun(HttpExchange)」）—— 也就是说
+     * <b>dev 在这一处是编译不过的</b>。这里补上语义一致的最小实现，
+     * 让开局房间接口的对局校验与本文件其它接口保持一致。</p>
+     */
+    private boolean requireRun(HttpExchange ex) throws IOException {
+        return requireController(ex) != null;
+    }
+
     // ============ 选角 / 开局 ============
 
     private void handleCharacters(HttpExchange ex) throws IOException {
@@ -388,6 +402,13 @@ public final class GameServer {
                 handleSelectReward(ex);
                 return;
             }
+            // Boss 遗物三选一：与普通奖励分开成端点，因为它的结算语义不同
+            // （必须选定一件，且选定后会推进章节）。
+            if ("/api/v1/reward/select-relic".equals(path)
+                    && "POST".equals(ex.getRequestMethod())) {
+                handleSelectRelic(ex);
+                return;
+            }
             sendError(ex, 404, "NOT_FOUND", "接口不存在");
         } catch (Exception e) {
             e.printStackTrace();
@@ -420,6 +441,35 @@ public final class GameServer {
             }
         } catch (IllegalArgumentException | IllegalStateException e) {
             sendError(ex, 400, "INVALID_CARD", e.getMessage());
+            return;
+        }
+        sendJson(ex, 200, GameStateJson.emptyRewardJson());
+    }
+
+    /**
+     * {@code POST /api/v1/reward/select-relic}：从 Boss 遗物三选一中选定一件。
+     *
+     * <p>请求体 {@code {"relicId":"crimson_crown"}}。与 {@code /reward/select} 分开的理由：
+     * 普通奖励是「领卡或跳过」，而 Boss 遗物是「必须选一件」，且选定后会推进章节 ——
+     * 塞进同一个端点会让「cardId 为 null」同时表示「跳过」和「非法」。</p>
+     */
+    private void handleSelectRelic(HttpExchange ex) throws IOException {
+        if (requireController(ex) == null) {
+            return;
+        }
+        String relicId = Json.field(readBody(ex), "relicId");
+        if (relicId == null || relicId.isBlank()) {
+            sendError(ex, 400, "INVALID_RELIC", "必须提供 relicId");
+            return;
+        }
+        if (controller.getPhase() != GamePhase.REWARD) {
+            sendError(ex, 400, "NO_PENDING_REWARD", "当前没有待领取的奖励");
+            return;
+        }
+        try {
+            controller.selectBossRelic(relicId);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            sendError(ex, 400, "INVALID_RELIC", e.getMessage());
             return;
         }
         sendJson(ex, 200, GameStateJson.emptyRewardJson());

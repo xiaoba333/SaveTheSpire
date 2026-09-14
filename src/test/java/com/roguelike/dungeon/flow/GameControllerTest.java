@@ -12,12 +12,15 @@ import com.roguelike.dungeon.game.card.CardRarity;
 import com.roguelike.dungeon.game.campfire.CampfireActionStatus;
 import com.roguelike.dungeon.game.entity.BattleEndHealRelic;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.Relic;
+import com.roguelike.dungeon.game.entity.RelicRarity;
 import com.roguelike.dungeon.game.event.EventActionStatus;
 import com.roguelike.dungeon.game.event.EventChoice;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
 import com.roguelike.dungeon.game.relic.RelicLibrary;
 import com.roguelike.dungeon.game.reward.BattleReward;
+import com.roguelike.dungeon.game.reward.RewardService;
 import com.roguelike.dungeon.game.run.RunState;
 import com.roguelike.dungeon.game.shop.ShopActionResult;
 import com.roguelike.dungeon.game.shop.ShopItem;
@@ -288,10 +291,18 @@ class GameControllerTest {
         int goldBefore = runState.getGold();
         controller.skipRewardCard();
 
-        assertEquals(2, runState.getCurrentAct());
-        assertEquals(GamePhase.MAP, controller.getPhase());
+        // 串联：第一段（金币 + 稀有牌 + 高塔之匙）结算完紧接第二段「Boss 遗物三选一」，
+        // 这时章节还没推进 —— 推到最后一段选定之后。
+        BattleReward relicStage = controller.getCurrentReward().orElseThrow();
+        assertTrue(relicStage.hasRelicChoices());
+        assertEquals(1, runState.getCurrentAct());
         assertEquals(goldBefore + GameController.BOSS_GOLD_REWARD, runState.getGold());
         assertTrue(player.hasRelicById(RelicLibrary.TOWER_KEY));
+
+        controller.selectBossRelic(relicStage.relicChoices().getFirst().id());
+
+        assertEquals(2, runState.getCurrentAct());
+        assertEquals(GamePhase.MAP, controller.getPhase());
         assertTrue(controller.getMapService().getCompletedNodeIds().isEmpty());
     }
 
@@ -344,6 +355,77 @@ class GameControllerTest {
         assertEquals(GamePhase.VICTORY, controller.getPhase());
         assertFalse(runState.hasNextAct());
         assertTrue(controller.getCurrentNode().isEmpty());
+    }
+
+    @Test
+    void bossVictoryShouldOfferThreeBossRelicsBeforeAdvancingAct() {
+        RunState runState = newRunState(2);
+        // 开局房间阶段（BLESSING）要先用 controllerOnMap 吃掉，否则下面的
+        // switch 会走到 default 分支。
+        GameController controller = controllerOnMap(runState, List.of());
+
+        // 一路推进到第一章 Boss 打完，停在「Boss 遗物三选一」上。
+        // 循环由「是否已停在 Boss 三选一」驱动，不按节点数估算 —— 每个节点要
+        // 走 MAP→战斗/非战斗→REWARD 三次迭代，固定上限很容易在商店节点中途耗尽。
+        int safetyCounter = 0;
+        while (safetyCounter++ < 80) {
+            if (controller.getPhase() == GamePhase.REWARD
+                    && controller.getCurrentReward().orElseThrow().hasRelicChoices()) {
+                break;
+            }
+            switch (controller.getPhase()) {
+                case MAP -> controller.selectNode(
+                        controller.getMapService().getAvailableNodes().getFirst().id());
+                case BATTLE, EVENT, SHOP, REST ->
+                        controller.onLevelFinished(LevelResult.COMPLETED);
+                case REWARD -> controller.skipRewardCard();
+                default -> throw new AssertionError(
+                        "推进途中出现未预期阶段: " + controller.getPhase());
+            }
+        }
+
+        // 停在奖励阶段，且章节尚未推进 —— 遗物是拿到下一章去用的
+        assertEquals(GamePhase.REWARD, controller.getPhase());
+        assertEquals(1, runState.getCurrentAct(),
+                "选遗物之前不应推进章节，否则选完会直接跳过一个章节");
+        BattleReward bossReward = controller.getCurrentReward().orElseThrow();
+        assertTrue(bossReward.hasRelicChoices());
+        assertEquals(RewardService.BOSS_RELIC_CHOICE_COUNT,
+                bossReward.relicChoices().size());
+        assertTrue(bossReward.relicChoices().stream()
+                        .allMatch(relic -> relic.rarity() == RelicRarity.BOSS),
+                "Boss 三选一里只能出现 Boss 稀有度的遗物");
+        assertEquals(bossReward.relicChoices().size(),
+                bossReward.relicChoices().stream().map(Relic::id).distinct().count(),
+                "候选中不应出现重复遗物");
+
+        // 选定一件 → 遗物入袋，章节推进到第 2 章
+        Relic chosen = controller.selectBossRelic(
+                bossReward.relicChoices().getFirst().id());
+        assertTrue(runState.getPlayer().hasRelicById(chosen.id()));
+        assertEquals(2, runState.getCurrentAct());
+        assertEquals(GamePhase.MAP, controller.getPhase());
+        assertTrue(controller.getCurrentReward().isEmpty());
+    }
+
+    @Test
+    void singleActRunShouldNotOfferBossRelicAndShouldFinishDirectly() {
+        RunState runState = newRunState(1);
+        GameController controller = new GameController(runState, List.of(), line -> { });
+
+        int safetyCounter = 0;
+        while (controller.getPhase() != GamePhase.VICTORY && safetyCounter++ < 30) {
+            completeOneNode(controller);
+        }
+
+        // 单章模式下打完 Boss 就是通关，不做 Boss 遗物三选一 —— 发下去也没地方用。
+        // 注意「高塔之匙」也是 BOSS 稀有度（由流程层定点发放），所以要把它排除在外，
+        // 这里断言的是「随机池里的 Boss 遗物一件都没发」。
+        assertEquals(GamePhase.VICTORY, controller.getPhase());
+        assertTrue(runState.getPlayer().getRelics().stream()
+                        .noneMatch(relic -> relic.rarity() == RelicRarity.BOSS
+                                && !relic.id().equals(RelicLibrary.TOWER_KEY)),
+                "单章模式不应发放随机池里的 Boss 遗物");
     }
 
     @Test
@@ -405,13 +487,21 @@ class GameControllerTest {
         switch (controller.getPhase()) {
             case BATTLE -> {
                 controller.onLevelFinished(LevelResult.COMPLETED);
-                if (controller.getPhase() == GamePhase.REWARD) {
-                    controller.skipRewardCard();
+                // 普通战斗只有一段奖励；Boss 是「串行两段」：
+                // 先金币 + 稀有牌 + 高塔之匙，再 Boss 遗物三选一。
+                while (controller.getPhase() == GamePhase.REWARD) {
+                    BattleReward reward = controller.getCurrentReward().orElseThrow();
+                    if (reward.hasRelicChoices()) {
+                        controller.selectBossRelic(
+                                reward.relicChoices().getFirst().id());
+                    } else {
+                        controller.skipRewardCard();
+                    }
                 }
             }
             case EVENT, SHOP, REST -> controller.onLevelFinished(LevelResult.COMPLETED);
             default -> {
-                // 领完 Boss 奖励后可能已经切到新章节或最终胜利。
+                // Boss 的两段奖励都走完了：可能已经切到新章节，或最终胜利。
             }
         }
     }

@@ -191,8 +191,22 @@ public final class GameStateJson {
 
     // ---------- 奖励 ----------
 
+    /**
+     * 待领取奖励快照。
+     *
+     * <p>遗物分两种形态下发，前端据此走不同的领取端点：</p>
+     * <ul>
+     *   <li>{@code relic}：普通掉落的单件遗物，随卡牌一起「命中即得」，
+     *       走 {@code POST /reward/select}。</li>
+     *   <li>{@code relicChoices} + {@code bossRelicChoice=true}：Boss 遗物三选一，
+     *       必须调 {@code POST /reward/select-relic} 选定，且选定后会推进章节。</li>
+     * </ul>
+     *
+     * <p>此前这里连普通遗物都没有下发（只有 gold + cardChoices），
+     * 前端因此看不到任何遗物奖励 —— 一并补上。</p>
+     */
     public static String rewardJson(BattleReward reward) {
-        StringBuilder sb = new StringBuilder(256);
+        StringBuilder sb = new StringBuilder(512);
         sb.append("{\"gold\":").append(reward.gold());
         sb.append(",\"cardChoices\":[");
         List<Card> choices = reward.cardChoices();
@@ -202,23 +216,34 @@ public final class GameStateJson {
             }
             sb.append(cardDefJson(choices.get(i), "COMMON"));
         }
-        sb.append("]");
-        if (reward.hasRelic()) {
-            Relic relic = reward.relic();
-            sb.append(",\"relic\":{\"id\":").append(Json.str(relic.id()))
-                    .append(",\"name\":").append(Json.str(relic.name()))
-                    .append(",\"description\":").append(Json.str(relic.description()))
-                    .append(",\"icon\":null}");
-        } else {
-            sb.append(",\"relic\":null");
+        sb.append("],\"relic\":");
+        sb.append(reward.hasRelic() ? relicJson(reward.relic()) : "null");
+        sb.append(",\"bossRelicChoice\":").append(reward.hasRelicChoices());
+        sb.append(",\"relicChoices\":[");
+        List<Relic> relicChoices = reward.relicChoices();
+        for (int i = 0; i < relicChoices.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(relicJson(relicChoices.get(i)));
         }
-        sb.append('}');
+        sb.append("]}");
         return sb.toString();
+    }
+
+    /** 单件遗物的 JSON 形态，字段与玩家持有的遗物保持一致。 */
+    private static String relicJson(Relic relic) {
+        return "{\"id\":" + Json.str(relic.id())
+                + ",\"name\":" + Json.str(relic.name())
+                + ",\"description\":" + Json.str(relic.description())
+                + ",\"rarity\":" + Json.str(relic.rarity().name())
+                + ",\"icon\":null}";
     }
 
     /** 无待领取奖励（或已领取完）时的空奖励。 */
     public static String emptyRewardJson() {
-        return "{\"gold\":0,\"cardChoices\":[],\"relic\":null}";
+        return "{\"gold\":0,\"cardChoices\":[],\"relic\":null,"
+                + "\"bossRelicChoice\":false,\"relicChoices\":[]}";
     }
 
     // ---------- 商店 ----------

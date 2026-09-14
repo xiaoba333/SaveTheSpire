@@ -20,9 +20,11 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-/** 生成并结算一场战斗结束后的奖励。 */
+/** 生成并结算一场普通、精英或 Boss 战斗的奖励。 */
 public final class RewardService {
     public static final int CARD_CHOICE_COUNT = 3;
+    /** Boss 遗物三选一的候选数量。 */
+    public static final int BOSS_RELIC_CHOICE_COUNT = 3;
 
     private final RunState runState;
     private final BattleReward reward;
@@ -175,6 +177,57 @@ public final class RewardService {
         return rewardSeed * 31 + 0x9E3779B97F4A7C15L;
     }
 
+    /**
+     * 构造一份 <b>Boss 遗物三选一</b> 奖励。
+     *
+     * <p>与普通战斗奖励的三点差异，对齐杀戮尖塔的 Boss 宝箱：</p>
+     * <ul>
+     *   <li>不发金币（{@code gold = 0}）—— 宝箱只给遗物。</li>
+     *   <li>没有卡牌候选 —— 卡牌奖励是普通战斗的事。</li>
+     *   <li>遗物是「候选」而非「命中即得」，必须调用 {@link #selectRelic(String)} 才算领取。</li>
+     * </ul>
+     *
+     * @param choices 候选遗物；由 {@code RelicLibrary.bossChoices} 负责去重与洗牌
+     */
+    public static RewardService forBossRelicChoice(
+            RunState runState,
+            List<Relic> choices,
+            RelicService relicService) {
+        Objects.requireNonNull(choices, "Boss 遗物候选不能为 null");
+        if (choices.isEmpty()) {
+            throw new IllegalArgumentException("Boss 遗物候选不能为空");
+        }
+        return new RewardService(
+                runState,
+                new BattleReward(0, List.of(), null, choices),
+                () -> UUID.randomUUID().toString(),
+                relicService);
+    }
+
+    /**
+     * 领取 Boss 遗物三选一中的一件，并完成奖励结算。
+     *
+     * <p>未被选中的候选不产生任何副作用 —— 它们只是展示用的数据对象。</p>
+     *
+     * @param relicId 所选遗物编号，必须落在候选列表内
+     * @return 固定返回 COMPLETED
+     */
+    public LevelResult selectRelic(String relicId) {
+        ensureUnresolved();
+        if (!reward.hasRelicChoices()) {
+            throw new IllegalStateException("当前奖励不是 Boss 遗物三选一");
+        }
+        if (relicService == null) {
+            throw new IllegalStateException("未接入遗物服务，无法发放 Boss 遗物");
+        }
+        Relic chosen = reward.findRelicChoice(relicId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "所选遗物不在 Boss 候选列表中: " + relicId));
+        relicService.acquire(chosen);
+        resolved = true;
+        return LevelResult.COMPLETED;
+    }
+
     public BattleReward getReward() {
         return reward;
     }
@@ -191,6 +244,7 @@ public final class RewardService {
      */
     public LevelResult claimCard(String cardDefinitionId) {
         ensureUnresolved();
+        ensureCardReward();
         Card selectedCard = reward.cardChoices().stream()
                 .filter(card -> card.id().equals(cardDefinitionId))
                 .findFirst()
@@ -214,6 +268,7 @@ public final class RewardService {
     /** 跳过卡牌选择，只领取金币（如有遗物一并领取）并完成奖励结算。 */
     public LevelResult skipCard() {
         ensureUnresolved();
+        ensureCardReward();
         ensureGoldWillNotOverflow();
         runState.addGold(reward.gold());
         grantRelic();
@@ -231,6 +286,19 @@ public final class RewardService {
     private void ensureUnresolved() {
         if (resolved) {
             throw new IllegalStateException("战斗奖励已经结算");
+        }
+    }
+
+    /**
+     * Boss 遗物三选一没有卡牌可领，因此不能走领卡 / 跳过卡的路径。
+     *
+     * <p>不加这道闸的话，一次误调就会「什么都没发」却把奖励标记成已结算，
+     * 玩家将永远拿不到 Boss 遗物 —— 是这个流程最容易踩的静默失败。</p>
+     */
+    private void ensureCardReward() {
+        if (reward.hasRelicChoices()) {
+            throw new IllegalStateException(
+                    "Boss 遗物三选一必须先选定遗物才能结算");
         }
     }
 

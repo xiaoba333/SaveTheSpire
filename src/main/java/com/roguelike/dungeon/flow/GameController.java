@@ -252,6 +252,28 @@ public final class GameController implements LevelFinishHandler {
         finishReward();
     }
 
+    /**
+     * 从 Boss 遗物三选一中选定一件，并结算奖励。
+     *
+     * <p>这是 Boss 遗物唯一的领取入口 —— 它既发放遗物，也负责推进章节，
+     * 因此界面必须在奖励阶段调用它，而不是 {@link #skipRewardCard()}。</p>
+     *
+     * @param relicId 所选遗物编号，必须落在当前候选列表内
+     * @return 实际获得的遗物
+     */
+    public Relic selectBossRelic(String relicId) {
+        requirePhase(GamePhase.REWARD);
+        if (currentReward == null || !currentReward.getReward().hasRelicChoices()) {
+            throw new IllegalStateException("当前奖励不是 Boss 遗物三选一");
+        }
+        Relic chosen = currentReward.getReward().findRelicChoice(relicId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "所选遗物不在 Boss 候选列表中: " + relicId));
+        currentReward.selectRelic(relicId);
+        finishReward();
+        return chosen;
+    }
+
     /** 提交当前事件的一个选项。成功后事件节点会自动结算。 */
     public EventChoiceResult chooseEventChoice(String choiceId) {
         requirePhase(GamePhase.EVENT);
@@ -421,21 +443,71 @@ public final class GameController implements LevelFinishHandler {
         return runState.getRunSeed() ^ 0xB1E5510C00L;
     }
 
+    /**
+     * 结算当前奖励，并决定下一步进入哪个阶段。
+     *
+     * <p>Boss 节点是<b>串行两段奖励</b>（#95 的取舍：不动 dev 已有的 Boss 奖励，
+     * 只在它后面追加三选一）：</p>
+     *
+     * <ol>
+     *   <li>第一段：金币 + 稀有牌 + 固定「高塔之匙」，由 {@link #createBattleReward}
+     *       生成，走普通的领卡 / 跳过卡流程。此处<b>先不推进章节</b>。</li>
+     *   <li>第二段：Boss 遗物三选一（{@link RewardService#forBossRelicChoice}），
+     *       必须由玩家选定一件才算结算。</li>
+     * </ol>
+     *
+     * <p><b>章节推进统一放在第二段选定之后。</b>若在第一段就
+     * {@code completeCurrentNode()} + {@code advanceAct()}，地图已经翻到第二章，
+     * 而奖励阶段还挂在已完成的节点上，玩家选完遗物会再推一次 —— 直接跳过一章。</p>
+     *
+     * <p>三选一的闸门是 {@code hasNextAct()}：单章模式下打完 Boss 即通关，
+     * 发下来的遗物没有后续步骤能消耗它，于是退回原有行为（结算完直接通关）。</p>
+     */
     private void finishReward() {
         MapNode node = requireCurrentNode();
         boolean boss = node.type() == MapNodeType.BOSS;
-        getMapService().completeCurrentNode();
+        BattleReward reward = currentReward.getReward();
+        boolean bossRelicStage = reward.hasRelicChoices();
         currentReward = null;
-        if (boss) {
-            if (runState.hasNextAct()) {
-                runState.advanceAct();
-                phase = GamePhase.MAP;
-            } else {
-                phase = GamePhase.VICTORY;
-            }
+
+        if (bossRelicStage) {
+            // 第二段（Boss 遗物三选一）已选定：这里才推进章节
+            advanceAfterBoss();
             return;
         }
+
+        if (boss && runState.hasNextAct()) {
+            List<Relic> choices = RelicLibrary.bossChoices(
+                    rewardSeed(node),
+                    runState.getPlayer(),
+                    RewardService.BOSS_RELIC_CHOICE_COUNT);
+            if (!choices.isEmpty()) {
+                // 第一段结算完毕，追加第二段三选一；章节推进留到选定之后
+                currentReward = RewardService.forBossRelicChoice(
+                        runState, choices, relicService);
+                phase = GamePhase.REWARD;
+                return;
+            }
+        }
+
+        if (boss) {
+            advanceAfterBoss();
+            return;
+        }
+
+        getMapService().completeCurrentNode();
         phase = GamePhase.MAP;
+    }
+
+    /** 完成 Boss 节点并前进到下一章；已是最后一章则通关。 */
+    private void advanceAfterBoss() {
+        getMapService().completeCurrentNode();
+        if (runState.hasNextAct()) {
+            runState.advanceAct();
+            phase = GamePhase.MAP;
+        } else {
+            phase = GamePhase.VICTORY;
+        }
     }
 
     private MapNode requireCurrentNode() {
