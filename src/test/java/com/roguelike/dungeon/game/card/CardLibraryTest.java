@@ -29,6 +29,8 @@ class CardLibraryTest {
                 .contains(CardLibrary.FORGE));
         assertTrue(CardLibrary.rewardPoolFor(CardLibrary.warriorRewardCardIds())
                 .contains(CardLibrary.IRON_WAVE));
+        assertTrue(CardLibrary.warriorRewardCards().contains(CardLibrary.BLOOD_METALLICIZE));
+        assertFalse(CardLibrary.bloodLordRewardCards().contains(CardLibrary.BLOOD_METALLICIZE));
     }
 
     @Test
@@ -49,6 +51,17 @@ class CardLibraryTest {
         assertEquals(0, bloodletting.cost());
         assertTrue(bloodletting.playable());
         assertFalse(bloodletting.exhausts());
+    }
+
+    @Test
+    void ofRarityShouldKeepRareCardsInOriginalOrder() {
+        List<Card> rares = CardLibrary.ofRarity(
+                CardLibrary.bloodLordRewardCards(), CardRarity.RARE);
+
+        assertTrue(rares.contains(CardLibrary.BLOOD_LORD));
+        assertTrue(rares.contains(CardLibrary.CRIMSON_POOL));
+        assertTrue(rares.stream().allMatch(card -> card.rarity() == CardRarity.RARE));
+        assertFalse(rares.contains(CardLibrary.BLOODLETTING));
     }
 
     @Test

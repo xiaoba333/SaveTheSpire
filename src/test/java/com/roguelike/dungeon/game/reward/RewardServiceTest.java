@@ -5,6 +5,8 @@ import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.Relic;
+import com.roguelike.dungeon.game.relic.RelicLibrary;
 import com.roguelike.dungeon.game.run.RunState;
 import org.junit.jupiter.api.Test;
 
@@ -91,6 +93,17 @@ class RewardServiceTest {
         assertThrows(IllegalStateException.class, service::skipCard);
         assertEquals(30, state.getGold());
         assertEquals(1, state.getDeck().size());
+    }
+
+    @Test
+    void generateRewardCanAttachGuaranteedRelic() {
+        Relic key = RelicLibrary.create(RelicLibrary.TOWER_KEY);
+        BattleReward reward = RewardService.generateReward(
+                REWARD_POOL, 12345L, 150, key);
+
+        assertEquals(150, reward.gold());
+        assertEquals(RelicLibrary.TOWER_KEY, reward.relic().id());
+        assertEquals("更深度探索的钥匙......", reward.relic().description());
     }
 
     @Test

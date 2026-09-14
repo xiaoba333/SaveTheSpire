@@ -11,10 +11,12 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * 按地图节点挑选第一章怪物：普通小怪池、精英、Boss 蛋链。
+ * 按地图节点挑选怪物：普通小怪池、精英、Boss 蛋链。
  *
- * <p>怪物数据分别来自 {@link ActOneBestiary}（原有 11 只）与
- * {@link ActOneExtraBestiary}（扩充的 6 只），这里只负责「按节点类型挑谁上场」。</p>
+ * <p>第二层暂与第一层共用同一图鉴。</p>
+ *
+ * <p>怪物数据分别来自 {@link com.roguelike.dungeon.game.enemy.bestiary.ActOneBestiary}
+ * （原有 11 只）与扩充图鉴，这里只负责「按节点类型挑谁上场」。</p>
  *
  * <h2>两条挑选路径</h2>
  *

@@ -20,7 +20,7 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-/** 生成并结算一场普通或精英战斗的奖励。 */
+/** 生成并结算一场战斗结束后的奖励。 */
 public final class RewardService {
     public static final int CARD_CHOICE_COUNT = 3;
 
@@ -71,6 +71,24 @@ public final class RewardService {
                 relicService);
     }
 
+    /**
+     * 创建一份待领取的战斗奖励，并附带指定遗物（例如 Boss 固定掉落高塔之匙）。
+     *
+     * @param guaranteedRelic 固定发放的遗物；为 null 时不附带遗物
+     */
+    public RewardService(
+            RunState runState,
+            List<Card> rewardPool,
+            long rewardSeed,
+            int gold,
+            RelicService relicService,
+            Relic guaranteedRelic) {
+        this(runState,
+                generateReward(rewardPool, rewardSeed, gold, guaranteedRelic),
+                () -> UUID.randomUUID().toString(),
+                relicService);
+    }
+
     /** 供测试注入稳定卡牌实例编号。 */
     RewardService(
             RunState runState,
@@ -100,7 +118,19 @@ public final class RewardService {
             List<Card> rewardPool,
             long rewardSeed,
             int gold) {
-        return generateReward(rewardPool, rewardSeed, gold, null);
+        return generateReward(rewardPool, rewardSeed, gold, (RelicService) null);
+    }
+
+    /**
+     * 从卡池中抽取卡牌，并附带一件指定遗物。
+     */
+    public static BattleReward generateReward(
+            List<Card> rewardPool,
+            long rewardSeed,
+            int gold,
+            Relic relic) {
+        BattleReward cardsAndGold = generateReward(rewardPool, rewardSeed, gold);
+        return new BattleReward(cardsAndGold.gold(), cardsAndGold.cardChoices(), relic);
     }
 
     /**

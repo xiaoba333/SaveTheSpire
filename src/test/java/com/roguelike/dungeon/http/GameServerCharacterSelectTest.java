@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -55,20 +56,43 @@ class GameServerCharacterSelectTest {
     }
 
     @Test
-    void creatingWarriorRunReturnsMapPhaseAndStartingStats() throws Exception {
+    void creatingWarriorRunReturnsBlessingPhaseAndStartingStats() throws Exception {
         HttpResponse<String> created = post("/runs",
                 "{\"characterId\":\"warrior\",\"seed\":12345,\"actCount\":1}");
 
         assertEquals(200, created.statusCode());
-        assertTrue(created.body().contains("\"phase\":\"MAP\""));
+        assertTrue(created.body().contains("\"phase\":\"BLESSING\""));
         assertTrue(created.body().contains("铁血战士"));
         assertTrue(created.body().contains("\"hp\":50"));
         assertTrue(created.body().contains("燃烧之血"));
 
+        HttpResponse<String> blessing = get("/blessing");
+        assertEquals(200, blessing.statusCode());
+        assertTrue(blessing.body().contains("\"options\":["));
+        assertTrue(blessing.body().contains("remove_card")
+                || blessing.body().contains("upgrade_card")
+                || blessing.body().contains("max_hp")
+                || blessing.body().contains("gold")
+                || blessing.body().contains("damage_gold"));
+
+        String optionId = firstInstantBlessingId(blessing.body());
+        HttpResponse<String> chosen = post("/blessing/choose",
+                "{\"optionId\":\"" + optionId + "\"}");
+        assertEquals(200, chosen.statusCode());
+        assertTrue(chosen.body().contains("\"phase\":\"MAP\""));
+
         HttpResponse<String> character = get("/character");
         assertEquals(200, character.statusCode());
         assertTrue(character.body().contains("铁血战士"));
-        assertTrue(character.body().contains("\"gold\":0"));
+    }
+
+    private static String firstInstantBlessingId(String json) {
+        for (String id : List.of("gold", "max_hp", "damage_gold")) {
+            if (json.contains("\"id\":\"" + id + "\"")) {
+                return id;
+            }
+        }
+        throw new IllegalStateException("开局房间没有即时选项：" + json);
     }
 
     @Test

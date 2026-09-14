@@ -53,6 +53,34 @@ public record Card(
     }
 
     /**
+     * 兼容旧调用：升级说明默认与普通说明相同，并指定稀有度。
+     */
+    public Card(
+            String id,
+            String name,
+            CardType type,
+            int cost,
+            String description,
+            CardEffect effect,
+            boolean exhausts,
+            boolean playable,
+            boolean upgradable,
+            CardRarity rarity) {
+        this(
+                id,
+                name,
+                type,
+                cost,
+                description,
+                description,
+                effect,
+                exhausts,
+                playable,
+                upgradable,
+                rarity);
+    }
+
+    /**
      * 兼容旧调用：稀有度默认普通。
      */
     public Card(

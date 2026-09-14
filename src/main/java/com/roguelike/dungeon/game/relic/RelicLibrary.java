@@ -92,15 +92,11 @@ public final class RelicLibrary {
     // ---------- 扩充：Boss ----------
 
     public static final String DARK_PACT = "dark_pact";
-    /** 猩红王冠：以生命换爆发伤害。 */
+    public static final String TOWER_KEY = "tower_key";
     public static final String CRIMSON_CROWN = "crimson_crown";
-    /** 利维坦之心：以持续掉血换巨大生命池。 */
     public static final String LEVIATHAN_HEART = "leviathan_heart";
-    /** 废墟之盾：以输出换稳定护甲。 */
     public static final String AEGIS_OF_RUIN = "aegis_of_ruin";
-    /** 缚魂账簿：以开战掉上限换每战成长。 */
     public static final String SOULBOUND_LEDGER = "soulbound_ledger";
-    /** 末日之钟：周期性爆发伤害。 */
     public static final String DOOMSDAY_CLOCK = "doomsday_clock";
 
     /**
@@ -426,6 +422,13 @@ public final class RelicLibrary {
                     ctx.player().reduceMaxHealth(12);
                     ctx.player().addMaxEnergy(1);
                     ctx.log("「黑暗契约」触发：能量上限 +1，最大生命 -12。");
+                }));
+
+        register(TOWER_KEY, () -> new SimpleRelic(TOWER_KEY, "高塔之匙",
+                "更深度探索的钥匙......", RelicRarity.BOSS,
+                Set.of(),
+                (trigger, ctx) -> {
+                    // 占位遗物：目前没有战斗效果。
                 }));
 
         register(CRIMSON_CROWN, () -> new SimpleRelic(CRIMSON_CROWN, "猩红王冠",
