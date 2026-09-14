@@ -48,6 +48,12 @@ public final class ScriptedMonsterAi implements MonsterAi {
         return monster.displayName();
     }
 
+    /** 怪物英文标识，前端按此选择敌人视觉。 */
+    @Override
+    public String id() {
+        return monster.id();
+    }
+
     @Override
     public int maxHp() {
         return monster.getMaxHealth();

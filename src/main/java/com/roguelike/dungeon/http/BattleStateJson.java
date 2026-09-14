@@ -3,6 +3,9 @@ package com.roguelike.dungeon.http;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
+import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.Power;
+import com.roguelike.dungeon.game.entity.StatusEffect;
 
 import java.util.List;
 
@@ -43,7 +46,7 @@ public final class BattleStateJson {
                 + ",\"energy\":" + c.getEnergy()
                 + ",\"maxEnergy\":" + c.getPlayerMaxEnergy()
                 + ",\"intent\":null"
-                + ",\"buffs\":[]}";
+                + ",\"buffs\":" + playerBuffsJson(c) + "}";
     }
 
     private static String enemyJson(Combat c) {
@@ -52,13 +55,92 @@ public final class BattleStateJson {
                 ? "null"
                 : "{\"type\":" + Json.str(intent.type())
                         + ",\"value\":" + intent.value() + "}";
-        return "{\"hp\":" + c.getMonsterHp()
+        return "{\"id\":" + Json.str(c.getMonsterId())
+                + ",\"hp\":" + c.getMonsterHp()
                 + ",\"maxHp\":" + c.getMonsterMaxHp()
                 + ",\"armor\":" + c.getMonsterBlock()
                 + ",\"energy\":0"
                 + ",\"maxEnergy\":0"
                 + ",\"intent\":" + intentJson
-                + ",\"buffs\":[]}";
+                + ",\"buffs\":" + enemyBuffsJson(c) + "}";
+    }
+
+    /** 玩家 buff = 状态效果（层数）+ 能力（无层数）。 */
+    private static String playerBuffsJson(Combat c) {
+        Player player = c.getPlayer();
+        StringBuilder sb = new StringBuilder(64);
+        sb.append('[');
+        boolean first = true;
+        for (StatusEffect effect : StatusEffect.values()) {
+            int stacks = player.getStacks(effect);
+            if (stacks <= 0) {
+                continue;
+            }
+            if (!first) {
+                sb.append(',');
+            }
+            first = false;
+            sb.append(statusBuffJson(effect, stacks));
+        }
+        for (Power power : player.getPowers()) {
+            if (!first) {
+                sb.append(',');
+            }
+            first = false;
+            sb.append(powerBuffJson(power));
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+
+    /** 怪物 buff 只有状态效果（怪物无能力）。 */
+    private static String enemyBuffsJson(Combat c) {
+        StringBuilder sb = new StringBuilder(64);
+        sb.append('[');
+        boolean first = true;
+        for (StatusEffect effect : StatusEffect.values()) {
+            int stacks = c.getMonsterStatusStacks(effect);
+            if (stacks <= 0) {
+                continue;
+            }
+            if (!first) {
+                sb.append(',');
+            }
+            first = false;
+            sb.append(statusBuffJson(effect, stacks));
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+
+    private static String statusBuffJson(StatusEffect effect, int stacks) {
+        return "{\"id\":" + Json.str(effect.name())
+                + ",\"name\":" + Json.str(effect.displayName())
+                + ",\"description\":" + Json.str(effect.description())
+                + ",\"stacks\":" + stacks
+                + ",\"icon\":" + Json.str(iconKey(effect))
+                + ",\"debuff\":" + isDebuff(effect) + "}";
+    }
+
+    private static String powerBuffJson(Power power) {
+        return "{\"id\":" + Json.str(power.getClass().getSimpleName())
+                + ",\"name\":" + Json.str(power.name())
+                + ",\"description\":" + Json.str(power.description())
+                + ",\"stacks\":0"
+                + ",\"icon\":null"
+                + ",\"debuff\":false}";
+    }
+
+    /** 图标键用枚举名小写，前端按 powers/48/{icon} 找图，找不到自动回退占位。 */
+    private static String iconKey(StatusEffect effect) {
+        return effect.name().toLowerCase();
+    }
+
+    private static boolean isDebuff(StatusEffect effect) {
+        return switch (effect) {
+            case VULNERABLE, WEAK, POISON -> true;
+            default -> false;
+        };
     }
 
     private static String handJson(Combat c) {

@@ -150,6 +150,11 @@ public class Combat {
         return monsterAi.name();
     }
 
+    /** 怪物英文标识，供 HTTP 层序列化为前端可识别的敌人视觉 id。 */
+    public String getMonsterId() {
+        return monsterAi.id();
+    }
+
     public int getMonsterBlock() {
         return state.getMonsterBlock();
     }
@@ -173,6 +178,16 @@ public class Combat {
 
     public int getMonsterMaxHp() {
         return state.getMonsterMaxHp();
+    }
+
+    /** 本场战斗共享的玩家实体（HTTP 层序列化 buff / 状态用，只读）。 */
+    public Player getPlayer() {
+        return state.getPlayer();
+    }
+
+    /** 怪物指定状态的当前层数（HTTP 层序列化 buff 用，只读）。 */
+    public int getMonsterStatusStacks(StatusEffect effect) {
+        return state.getMonsterStatusStacks(effect);
     }
 
     public int getTurnNumber() {
