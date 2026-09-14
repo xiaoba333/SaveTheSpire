@@ -259,31 +259,41 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 ## 7. 非战斗接口（map / reward / shop / event / deck / character）
 
 > 后端已从「独立战斗服务（`BattleServer`）」升级为「统一游戏服务（`GameServer`）」：一个进程承载一整局
-> 权威状态（`RunState` + `GameController`），把下面 10 个非战斗端点与第 4 节的 4 个战斗端点接到真实逻辑上。
-> 前端把 `GameSettings.UseHttpBackend` 置 `true` 即可走完整流程：菜单 → 地图 → 战斗 → 奖励 → 商店/事件 → 牌组/角色。
+> 权威状态（`RunState` + `GameController`），把下面的非战斗端点与第 4 节的 4 个战斗端点接到真实逻辑上。
+> 前端把 `GameSettings.UseHttpBackend` 置 `true` 即可走完整流程：菜单 → 地图 → 战斗 → 奖励 → 商店/事件/篝火 → 牌组/角色。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET`  | `/api/v1/characters` | 列出可选角色（不含隐藏角色 god） |
-| `POST` | `/api/v1/runs` | 按角色开一局；可重复调用以重开 |
+| `POST` | `/api/v1/game/start` | 用选中角色开局（前端选角界面入口，请求体只需 `characterId`） |
+| `POST` | `/api/v1/runs` | 同上，另可传 `seed` / `actCount` 复现同一局；可重复调用以重开 |
 | `GET`  | `/api/v1/runs` | 查询当前局阶段和角色状态 |
 | `GET`  | `/api/v1/map` | 拉取整张地图 |
-| `POST` | `/api/v1/map/advance` | 推进节点（战斗类=进入，非战斗类=进入+结算） |
+| `POST` | `/api/v1/map/advance` | 进入节点（任意类型都只「进入」，结算见 7.1） |
 | `GET`  | `/api/v1/reward` | 拉取当前战斗奖励 |
 | `POST` | `/api/v1/reward/select` | 选择一张奖励卡（cardId=null 表示跳过） |
-| `GET`  | `/api/v1/shop` | 拉取商店状态 |
+| `GET`  | `/api/v1/shop` | 拉取商店状态（含可删卡列表与删卡价） |
 | `POST` | `/api/v1/shop/buy` | 购买一件商品 |
-| `GET`  | `/api/v1/event` | 拉取当前事件 |
-| `POST` | `/api/v1/event/choose` | 结算事件选项（choiceId=null 表示离开） |
+| `POST` | `/api/v1/shop/remove` | 删除牌组中一张卡（`cardId`=牌组卡实例 id） |
+| `POST` | `/api/v1/shop/leave` | 离开商店并结算节点，返回最新地图 |
+| `GET`  | `/api/v1/event` | 拉取当前事件与选项 |
+| `POST` | `/api/v1/event/choose` | 结算事件选项（choiceId=null 视作 `leave`），返回最新地图 |
+| `GET`  | `/api/v1/campfire` | 拉取篝火操作与可锻造卡牌 |
+| `POST` | `/api/v1/campfire/act` | 执行篝火操作（`actionId`=rest/smith/leave），返回最新地图 |
 | `GET`  | `/api/v1/deck` | 拉取当前牌组 |
 | `GET`  | `/api/v1/character` | 拉取角色状态 |
 
 ### 7.1 地图推进语义（关键）
 
-前端 `map.Advance(nodeId)` 在不同节点类型下语义不同：
+`map/advance` 对**任意节点类型都只做「进入」**（后端 `GameController.selectNode`，由它按节点类型切到
+战斗 / 事件 / 商店 / 休息阶段）；随后由各自的结算端点离开节点、统一回到地图阶段：
 
-- **BATTLE / ELITE / BOSS**：`advance` 即「进入节点」，后端 `selectNode` 立即启动战斗；随后前端再调 `POST /battles` 取当前战斗。
-- **EVENT / SHOP / REST**：`advance` 只在结算后调用一次，后端按「进入 + 完成」一次性结算并回到地图阶段。
+- **BATTLE / ELITE / BOSS**：`advance` 进入即开战，随后前端调 `POST /battles` 取当前战斗；战斗结束走 `reward/*`。
+- **EVENT**：`advance` 进入后 `GET /event` 取事件与选项，`POST /event/choose` 结算。
+- **SHOP**：`advance` 进入后 `GET /shop`，用 `shop/buy`、`shop/remove` 操作，`shop/leave` 离开。
+- **REST（篝火）**：`advance` 进入后 `GET /campfire`，用 `campfire/act`（rest=回复 / smith=锻造升级 / leave=直接离开）结算。
+
+即「**进入**」与「**结算**」分离：进入只切阶段、不动地图进度；结算端点负责推进节点并把地图状态回给前端。
 
 节点 `id` 为**数字字符串**（如 `"0"`），`type` 用大写（`BATTLE/ELITE/EVENT/SHOP/REST/BOSS`），
 `state` 为 `LOCKED/SELECTABLE/CURRENT/PASSED`，`column`=层（0 在下、Boss 在最上）、`row`=同层横向位置。
@@ -311,8 +321,11 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
     { "id":"blood","name":"血祭者","description":"...","maxHealth":30,"maxEnergy":3,"startingGold":0 }
 ] }
 
+// POST /api/v1/game/start  请求 { "characterId":"warrior" }  → CharacterState
+{ "name":"铁血战士","hp":50,"maxHp":50,"gold":0,"relics":[ /* Relic */ ] }
+
 // POST /api/v1/runs  请求 { "characterId":"warrior", "seed":12345, "actCount":1 }
-// seed / actCount 可省略。隐藏角色可传 characterId=god。
+// seed / actCount 可省略（seed 省略则随机、actCount 省略则 1）。隐藏角色可传 characterId=god。
 // 响应 RunState：
 { "phase":"MAP", "character": { "name":"铁血战士","hp":50,"maxHp":50,"gold":0,"relics":[] } }
 
@@ -328,16 +341,29 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 // POST /api/v1/reward/select  请求 { "cardId": "quick_slash" }（null=跳过） → RewardState（选完返回空）
 
 // GET /api/v1/shop → ShopState
+// items 只含未售出的商品；removableCards 是牌组中可删的卡（实例 id）。
 { "gold": 20, "items": [ { "id":"c_strike","name":"打击","kind":"CARD","price":45,
-  "description":"造成 6 点伤害。","rarity":"COMMON","sold":false } ] }
+    "description":"造成 6 点伤害。","rarity":"COMMON","sold":false } ],
+  "removableCards": [ /* CardInstance */ ],
+  "cardRemovalUsed": false, "cardRemovalPrice": 75 }
 
 // POST /api/v1/shop/buy  请求 { "itemId": "c_strike" }  → ShopState
+// POST /api/v1/shop/remove  请求 { "cardId": "<牌组卡实例 id>" }  → ShopState（每家商店限一次）
+// POST /api/v1/shop/leave  → MapState
 
 // GET /api/v1/event → EventState
 { "id":"broken_statue","title":"破损的雕像","description":"...",
-  "choices":[ { "id":"pray","label":"虔诚祈祷（恢复 5 点生命）","disabled":false } ] }
+  "choices":[ { "id":"pray","label":"虔诚祈祷（恢复 5 点生命）","description":"...","disabled":false } ] }
 
-// POST /api/v1/event/choose  请求 { "choiceId": "pray" }（null=离开） → {}
+// POST /api/v1/event/choose  请求 { "choiceId": "pray" }（null=离开） → MapState
+
+// GET /api/v1/campfire → CampfireState
+{ "actions": [ { "id":"rest","label":"休息","description":"...","available":true,"unavailableReason":"" },
+               { "id":"smith","label":"锻造","description":"...","available":true,"unavailableReason":"" } ],
+  "upgradeableCards": [ /* CardInstance */ ] }
+
+// POST /api/v1/campfire/act  请求 { "actionId":"rest" } 或 { "actionId":"smith", "cardId":"<牌组卡实例 id>" }
+//                             或 { "actionId":"leave" }  → MapState
 
 // GET /api/v1/deck → DeckState
 { "cards": [ /* CardInstance */ ] }
@@ -350,15 +376,26 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 
 | code | 含义 |
 |------|------|
-| `NO_ACTIVE_RUN` | 尚未 `POST /runs` 选角开局 |
+| `NO_ACTIVE_RUN` | 尚未开局（`POST /game/start` 或 `POST /runs`）就调用了其余端点 |
 | `INVALID_CHARACTER` | characterId 缺失或不存在 |
 | `INVALID_ACT_COUNT` | actCount 小于等于 0 |
 | `NO_ACTIVE_BATTLE` | 未通过地图进入战斗就调用了 `POST /battles` |
 | `INVALID_NODE` | nodeId 非法 / 节点被锁 / 当前阶段不能进入 |
-| `INVALID_CARD` | 奖励选卡时 cardId 不在候选中 |
-| `INVALID_ITEM` | 商店商品不存在 |
-| `ITEM_SOLD` | 商品已售出 |
-| `NOT_ENOUGH_GOLD` | 金币不足 |
+| `INVALID_CARD` | 奖励选卡时 cardId 不在候选中；或 `shop/remove` 缺 cardId |
+| `INVALID_ITEM` | `shop/buy` 缺 itemId，或当前不在商店阶段 |
+| `INVALID_CHOICE` | 事件选项不存在或当前不可选 |
+| `INVALID_ACTION` | 篝火 actionId 未知 / 阶段不符；或 `shop/leave` 阶段不符 |
+
+商店操作失败时直接以状态名作为 code 返回（与 `ShopActionResult` 枚举同名）：
+
+| code | 含义 |
+|------|------|
+| `ITEM_NOT_FOUND` | 商品不存在 |
+| `ITEM_ALREADY_SOLD` | 商品已售出 |
+| `CARD_NOT_FOUND` | 牌组中不存在该卡牌 |
+| `INSUFFICIENT_GOLD` | 金币不足 |
+| `CARD_REMOVAL_ALREADY_USED` | 本商店已删除过卡牌（每家限一次） |
+| `SHOP_CLOSED` | 商店已关闭 |
 
 > MVP 已知限制：战斗失败（DEFEAT）后流程进入终局、无重试；Boss 胜利后无胜利界面（地图走完）；
-> 休息回 30% 最大生命；商店「移除一张卡」为占位、暂未结算；奖励金币为战斗 20 / 精英 35。
+> 篝火「休息」回复最大生命的 30%（生命已满时不可用）；奖励金币为战斗 20 / 精英 35。
