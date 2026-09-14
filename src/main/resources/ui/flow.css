@@ -146,3 +146,39 @@
     -fx-padding: 8 18 8 18;
 }
 
+/* 多敌人：敌人选择条。选中项用金边 + 亮字突出，未选中偏暗。 */
+.enemy-chip {
+    -fx-background-color: #2b2117;
+    -fx-border-color: #55432c;
+    -fx-border-width: 1.5;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-text-fill: #b6a68c;
+    -fx-font-size: 13px;
+    -fx-padding: 4 12 4 12;
+    -fx-cursor: hand;
+}
+
+.enemy-chip:hover {
+    -fx-border-color: #8a6f47;
+    -fx-text-fill: #e4d5b6;
+}
+
+.enemy-chip-selected {
+    -fx-background-color: #3b2c17;
+    -fx-border-color: #d9b168;
+    -fx-border-width: 2;
+    -fx-text-fill: #f4e3bd;
+    -fx-font-weight: bold;
+}
+
+.enemy-chip:disabled {
+    -fx-opacity: 0.45;
+    -fx-cursor: default;
+}
+
+.enemy-chip-dead {
+    -fx-text-fill: #6b6257;
+    -fx-border-color: #3a322a;
+}
+

@@ -308,10 +308,16 @@ public final class ActOneBestiary {
                 List.of(MonsterSpawn.of("skeleton")),
                 "骷髅：骨质疏松，被打得更疼，但自己也在掉血"));
 
+        // 站位顺序 = 行动顺序。这里刻意让「探险者女」先动、男后动：
+        // 探险者男的第一个意图是「给女探险者上10甲」，而每只怪在自己回合开始时会清空护甲
+        // （见 Monster.onTurnStart）。如果男先动，他刚给出去的10甲会被女自己的回合开始立刻清掉，
+        // 这条协作机制就白写了。让女先动，男的护甲才能留到玩家回合，玩家必须决定先杀谁。
         EncounterCatalog.register(new EncounterDefinition(
                 "act1_explorers", EncounterCategory.NORMAL, ACT,
-                List.of(new MonsterSpawn("explorer_male", 0), new MonsterSpawn("explorer_female", 0)),
-                "探险者二人组：男的上甲、女的加力量与回血，需要决定先杀谁"));
+                List.of(new MonsterSpawn("explorer_female", 0),
+                        new MonsterSpawn("explorer_male", 0)),
+                "探险者二人组：女先动（打2*3 / 全体加力量 / 全体回血），"
+                        + "男后动并给女补10甲（留到玩家回合），需要决定先杀谁"));
 
         // 精英池
         EncounterCatalog.register(new EncounterDefinition(

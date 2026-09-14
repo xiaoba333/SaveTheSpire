@@ -41,6 +41,8 @@ public final class BattleView extends StackPane {
     private final ProgressBar playerHpBar = new ProgressBar();
     private final ProgressBar monsterHpBar = new ProgressBar();
     private final VBox playerHud = new VBox(8);
+    private final HBox enemyBar = new HBox(8);
+    private final List<Button> enemyChips = new ArrayList<>();
     private final MonsterView monsterView = new MonsterView();
     private final HBox handBox = new HBox(10);
     private final Pane dragLayer = new Pane();
@@ -75,7 +77,8 @@ public final class BattleView extends StackPane {
         energyLabel.getStyleClass().add("hud-energy");
         playerHud.getChildren().addAll(playerTitle, playerHpLabel, playerHpBar, energyLabel);
 
-        VBox monsterHud = new VBox(6, intentLabel, monsterHpLabel, monsterHpBar, monsterView);
+        enemyBar.setAlignment(Pos.CENTER);
+        VBox monsterHud = new VBox(6, enemyBar, intentLabel, monsterHpLabel, monsterHpBar, monsterView);
         monsterHud.setAlignment(Pos.BOTTOM_CENTER);
         monsterHpBar.getStyleClass().add("hp-bar");
         monsterHpBar.setPrefWidth(260);
@@ -93,7 +96,7 @@ public final class BattleView extends StackPane {
         handBox.setAlignment(Pos.CENTER);
         handBox.setPadding(new Insets(8, 12, 16, 12));
         hintLabel.getStyleClass().add("battle-hint");
-        hintLabel.setText("把牌拖向怪物或拖出手牌区打出；锻造拖到目标牌上。");
+        hintLabel.setText(HINT_SINGLE);
 
         endTurnButton.getStyleClass().addAll("title-button");
         endTurnButton.setOnAction(event -> endTurn());
@@ -116,6 +119,14 @@ public final class BattleView extends StackPane {
 
     private String shownMonsterName;
 
+    /** 单怪提示文案。 */
+    private static final String HINT_SINGLE =
+            "把牌拖向怪物或拖出手牌区打出；锻造拖到目标牌上。";
+
+    /** 多怪提示文案：强调目标选择。 */
+    private static final String HINT_MULTI =
+            "多个敌人：点上方敌人标签或把牌拖到它身上切换目标；锻造拖到目标牌上。";
+
     public void bind(Combat combat, MapNodeType nodeType) {
         boolean newFight = this.combat != combat;
         this.combat = combat;
@@ -136,6 +147,8 @@ public final class BattleView extends StackPane {
         monsterView.stop();
         handBox.getChildren().clear();
         handCards.clear();
+        enemyBar.getChildren().clear();
+        enemyChips.clear();
     }
 
     public void refresh() {
@@ -151,6 +164,8 @@ public final class BattleView extends StackPane {
                 + "    护盾 " + combat.getMonsterBlock());
         monsterHpBar.setProgress(ratio(combat.getMonsterHp(), combat.getMonsterMaxHp()));
         intentLabel.setText(combat.getMonsterIntent());
+        hintLabel.setText(combat.hasMultipleMonsters() ? HINT_MULTI : HINT_SINGLE);
+        rebuildEnemyBar();
         String monsterName = combat.getMonsterName();
         if (!monsterName.equals(shownMonsterName)) {
             shownMonsterName = monsterName;
@@ -158,6 +173,47 @@ public final class BattleView extends StackPane {
         }
         endTurnButton.setDisable(busy || !combat.isPlayerTurn() || combat.isFinished());
         rebuildHand();
+    }
+
+    /**
+     * 重建敌人选择条。
+     *
+     * <p>只有一个敌人时整条隐藏，界面与历史版本完全一致；多敌人时每个敌人一个
+     * 可点按钮，选中的那个加金边。点击或把牌拖上去都会切换攻击目标。</p>
+     */
+    private void rebuildEnemyBar() {
+        enemyBar.getChildren().clear();
+        enemyChips.clear();
+        if (combat == null) {
+            return;
+        }
+        List<Combat.MonsterView> enemies = combat.getEnemies();
+        if (enemies.size() <= 1) {
+            return;
+        }
+        boolean selectable = combat.isPlayerTurn() && !busy && !combat.isFinished();
+        for (Combat.MonsterView enemy : enemies) {
+            Button chip = new Button(enemy.name() + "  " + enemy.hp() + "/" + enemy.maxHp());
+            chip.getStyleClass().add("enemy-chip");
+            if (enemy.targeted()) {
+                chip.getStyleClass().add("enemy-chip-selected");
+            }
+            if (!enemy.alive()) {
+                chip.getStyleClass().add("enemy-chip-dead");
+            }
+            chip.setDisable(!enemy.alive() || !selectable);
+            chip.setFocusTraversable(false);
+            chip.setOnAction(event -> {
+                if (combat == null || busy) {
+                    return;
+                }
+                if (combat.selectTarget(enemy.index())) {
+                    refresh();
+                }
+            });
+            enemyChips.add(chip);
+            enemyBar.getChildren().add(chip);
+        }
     }
 
     private void rebuildHand() {
@@ -229,6 +285,7 @@ public final class BattleView extends StackPane {
         boolean wasDragging = dragStarted;
         CardView hovered = cardAt(event.getSceneX(), event.getSceneY(), source);
         boolean overMonster = isOverMonster(event.getSceneX(), event.getSceneY());
+        int droppedOn = enemyIndexAt(event.getSceneX(), event.getSceneY());
         boolean playedUp = wasDragging && getScene() != null
                 && event.getSceneY() < getScene().getHeight() * 0.68;
         clearDrag();
@@ -247,10 +304,37 @@ public final class BattleView extends StackPane {
             tryPlay(hovered.instance(), source.instance().id(), false);
             return;
         }
+        // 拖到某个敌人标签上：既切换目标，也立刻把这张牌打向它。
+        if (droppedOn >= 0) {
+            combat.selectTarget(droppedOn);
+            refresh();
+            tryPlay(source.instance(), null, isAttack(source.instance()));
+            event.consume();
+            return;
+        }
         if (overMonster || playedUp) {
             tryPlay(source.instance(), null, isAttack(source.instance()));
         }
         event.consume();
+    }
+
+    /**
+     * 命中测试敌人选择条。
+     *
+     * @return 命中的敌人下标；没命中返回 -1
+     */
+    private int enemyIndexAt(double sceneX, double sceneY) {
+        for (int i = 0; i < enemyChips.size(); i++) {
+            Button chip = enemyChips.get(i);
+            if (!chip.isVisible() || chip.isDisabled()) {
+                continue;
+            }
+            Bounds bounds = chip.localToScene(chip.getBoundsInLocal());
+            if (bounds.contains(sceneX, sceneY)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void tryPlay(CardInstance instance, String forgeTargetId, boolean showAttackFx) {
@@ -283,8 +367,11 @@ public final class BattleView extends StackPane {
         if (combat == null || busy || !combat.isPlayerTurn()) {
             return;
         }
-        Combat.Intent intent = combat.getMonsterIntentInfo();
-        boolean incomingAttack = intent != null && "ATTACK".equals(intent.type());
+        // 多怪编队下只要有一只打算攻击，就播玩家受击表现。
+        boolean incomingAttack = combat.getEnemies().stream()
+                .anyMatch(enemy -> enemy.alive()
+                        && enemy.intent() != null
+                        && "ATTACK".equals(enemy.intent().type()));
         busy = true;
         combat.endPlayerTurn();
         if (incomingAttack) {

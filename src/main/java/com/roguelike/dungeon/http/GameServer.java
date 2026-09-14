@@ -2,7 +2,6 @@ package com.roguelike.dungeon.http;
 
 import com.roguelike.dungeon.flow.GameController;
 import com.roguelike.dungeon.flow.GamePhase;
-import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.flow.RunFactory;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
@@ -13,12 +12,10 @@ import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.character.CharacterDefinition;
 import com.roguelike.dungeon.game.character.GameCharacterCatalog;
-import com.roguelike.dungeon.game.entity.Player;
-import com.roguelike.dungeon.game.entity.Relic;
-import com.roguelike.dungeon.game.map.MapNode;
-import com.roguelike.dungeon.game.map.MapNodeType;
-import com.roguelike.dungeon.game.relic.RelicLibrary;
+import com.roguelike.dungeon.game.event.EventChoiceResult;
 import com.roguelike.dungeon.game.run.RunState;
+import com.roguelike.dungeon.game.shop.ShopActionResult;
+import com.roguelike.dungeon.game.shop.ShopService;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -26,22 +23,28 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 统一游戏 HTTP 服务器：单进程承载一整局权威状态（RunState + GameController），
- * 把 http-api.md 的 14 个端点接到真实后端逻辑上，与前端 HTTP 客户端一一对应。
+ * 把 http-api.md 的端点接到真实后端逻辑上，与前端 HTTP 客户端一一对应。
  *
  * <p>与 {@link BattleServer} 的手写 JSON + com.sun.net.httpserver 写法一致，用单线程
  * executor 串行化所有请求，保证非线程安全的 Combat / GameController 访问有序。</p>
  *
- * <p>地图推进语义：前端对战斗类节点（BATTLE/ELITE/BOSS）在开战前调 {@code map/advance}
- * 进入节点（后端即 {@link GameController#selectNode} 并启动战斗）；对事件/商店/休息节点
- * 则只在结算后调 {@code map/advance} 一次，后端按「进入 + 完成」一次性结算。</p>
+ * <p>地图推进语义：前端对任意节点先调 {@code map/advance} 进入节点（后端即
+ * {@link GameController#selectNode}，由它按节点类型切到战斗 / 事件 / 商店 / 休息阶段）；
+ * 随后非战斗节点通过各自的结算端点离开（{@code event/choose}、{@code shop/leave}、
+ * {@code campfire/act}），战斗节点通过 {@code POST /battles} 启动战斗。即「进入」与
+ * 「结算」分离，结算统一回地图状态。</p>
+ *
+ * <p>开局：{@code GET /characters} 列出可选角色，随后可用两个等价的入口开局——
+ * {@code POST /game/start}（前端选角界面用，只传 characterId）与 {@code POST /runs}
+ * （协议文档入口，可额外传 seed / actCount 以便复现）。未开局前其余端点返回
+ * {@code NO_ACTIVE_RUN}。</p>
  */
 public final class GameServer {
 
@@ -50,25 +53,15 @@ public final class GameServer {
     /** 未显式指定 actCount 时的章节数；至少 2 章，才能在打完第一章 Boss 后进入下一层。 */
     private static final int DEFAULT_ACT_COUNT = 2;
 
-    /** 固定商店库存（MVP）。 */
-    private static final List<ShopItem> SHOP_ITEMS = List.of(
-            new ShopItem("c_strike", "打击", "CARD", 45,
-                    "造成 6 点伤害。", "COMMON", CardLibrary.STRIKE),
-            new ShopItem("c_heavy_strike", "重击", "CARD", 90,
-                    "造成 12 点伤害。", "RARE", CardLibrary.HEAVY_STRIKE),
-            new ShopItem("whetstone", "磨刀石", "RELIC", 75,
-                    "你造成的伤害 +1。", "COMMON", null),
-            new ShopItem("p_heal", "治疗药水", "POTION", 60,
-                    "恢复 10 点生命。", null, null),
-            new ShopItem("s_remove", "移除一张卡", "SERVICE", 75,
-                    "从牌组中移除一张卡。", null, null));
-
+    // 固定商店库存表（SHOP_ITEMS）已随 dev 一起移除：#92 之后商店由
+    // game/shop/ShopService 动态生成（含 #100 加的遗物商品），HTTP 层只做透传。
     private final HttpServer server;
     private final GameCharacterCatalog catalog = new GameCharacterCatalog();
+
+    /** 本局权威状态；开局之前为 null。 */
     private RunState runState;
     private GameController controller;
     private String characterName;
-    private final Set<String> soldItems = new HashSet<>();
 
     /** 当前进行中的战斗编号；只在 POST /battles 时生成，随战斗结束失效。 */
     private String battleId;
@@ -76,6 +69,7 @@ public final class GameServer {
     public GameServer(int port) throws IOException {
         server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/api/v1/characters", withCors(this::handleCharacters));
+        server.createContext("/api/v1/game/start", withCors(this::handleStart));
         server.createContext("/api/v1/runs", withCors(this::handleRuns));
         server.createContext("/api/v1/character", withCors(this::handleCharacter));
         server.createContext("/api/v1/deck", withCors(this::handleDeck));
@@ -84,6 +78,7 @@ public final class GameServer {
         server.createContext("/api/v1/blessing", withCors(this::handleBlessing));
         server.createContext("/api/v1/shop", withCors(this::handleShop));
         server.createContext("/api/v1/event", withCors(this::handleEvent));
+        server.createContext("/api/v1/campfire", withCors(this::handleCampfire));
         server.createContext("/api/v1/battles", withCors(this::handleBattle));
         server.setExecutor(Executors.newSingleThreadExecutor());
     }
@@ -114,12 +109,14 @@ public final class GameServer {
         };
     }
 
-    private boolean requireRun(HttpExchange ex) throws IOException {
+    /** 未开局时返回 null 并已写出 400；否则返回当前控制器。 */
+    private GameController requireController(HttpExchange ex) throws IOException {
         if (controller == null || runState == null) {
-            sendError(ex, 400, "NO_ACTIVE_RUN", "尚未选择角色开局");
-            return false;
+            sendError(ex, 400, "NO_ACTIVE_RUN",
+                    "尚未开始游戏，请先 POST /api/v1/game/start 或 /api/v1/runs");
+            return null;
         }
-        return true;
+        return controller;
     }
 
     // ============ 选角 / 开局 ============
@@ -137,10 +134,29 @@ public final class GameServer {
         }
     }
 
+    /** {@code POST /api/v1/game/start}：前端选角界面入口，只传 characterId。 */
+    private void handleStart(HttpExchange ex) throws IOException {
+        try {
+            if (!"POST".equals(ex.getRequestMethod())) {
+                sendError(ex, 404, "NOT_FOUND", "接口不存在");
+                return;
+            }
+            CharacterDefinition character = startRun(ex, readBody(ex));
+            if (character == null) {
+                return;
+            }
+            sendJson(ex, 200, GameStateJson.characterJson(characterName, runState));
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendError(ex, 500, "INTERNAL_ERROR", "服务器内部错误");
+        }
+    }
+
+    /** {@code POST /api/v1/runs}：协议文档入口，可传 seed / actCount 复现同一局。 */
     private void handleRuns(HttpExchange ex) throws IOException {
         try {
             if ("GET".equals(ex.getRequestMethod())) {
-                if (!requireRun(ex)) {
+                if (requireController(ex) == null) {
                     return;
                 }
                 sendJson(ex, 200, GameStateJson.runJson(
@@ -151,19 +167,30 @@ public final class GameServer {
                 sendError(ex, 404, "NOT_FOUND", "接口不存在");
                 return;
             }
-            startRun(ex);
+            CharacterDefinition character = startRun(ex, readBody(ex));
+            if (character == null) {
+                return;
+            }
+            sendJson(ex, 200, GameStateJson.runJson(
+                    controller.getPhase().name(), characterName, runState));
         } catch (Exception e) {
             e.printStackTrace();
             sendError(ex, 500, "INTERNAL_ERROR", "服务器内部错误");
         }
     }
 
-    private void startRun(HttpExchange ex) throws IOException {
-        String body = readBody(ex);
+    /**
+     * 按请求体创建（或重开）本局，供 {@code /game/start} 与 {@code /runs} 共用。
+     *
+     * <p>可重复调用以重开：重新构造 RunState + GameController，丢弃上一局。</p>
+     *
+     * @return 选中角色；失败时已写出错误响应并返回 {@code null}
+     */
+    private CharacterDefinition startRun(HttpExchange ex, String body) throws IOException {
         String characterId = Json.field(body, "characterId");
         if (characterId == null || characterId.isBlank()) {
             sendError(ex, 400, "INVALID_CHARACTER", "缺少 characterId");
-            return;
+            return null;
         }
 
         CharacterDefinition character;
@@ -171,30 +198,27 @@ public final class GameServer {
             character = catalog.getById(characterId);
         } catch (IllegalArgumentException exception) {
             sendError(ex, 400, "INVALID_CHARACTER", exception.getMessage());
-            return;
+            return null;
         }
 
         Long seedValue = Json.longField(body, "seed");
-        long seed = seedValue == null
-                ? java.util.concurrent.ThreadLocalRandom.current().nextLong()
-                : seedValue;
+        long seed = seedValue == null ? ThreadLocalRandom.current().nextLong() : seedValue;
         Long actCountValue = Json.longField(body, "actCount");
         int actCount = actCountValue == null ? DEFAULT_ACT_COUNT : actCountValue.intValue();
         if (actCount <= 0) {
             sendError(ex, 400, "INVALID_ACT_COUNT", "章节数量必须大于 0");
-            return;
+            return null;
         }
 
         this.runState = RunFactory.createRun(catalog, character.id(), seed, actCount);
         this.characterName = character.name();
+        // 奖励卡池按角色区分（角色专属牌 + 公共无色牌，含锻造牌）。
         this.controller = new GameController(
                 runState,
                 CardLibrary.rewardPoolFor(character.rewardCardIds()),
                 System.out::println);
-        this.soldItems.clear();
         this.battleId = null;
-        sendJson(ex, 200, GameStateJson.runJson(
-                controller.getPhase().name(), characterName, runState));
+        return character;
     }
 
     // ============ 角色 / 牌组 ============
@@ -205,7 +229,7 @@ public final class GameServer {
                 sendError(ex, 404, "NOT_FOUND", "接口不存在");
                 return;
             }
-            if (!requireRun(ex)) {
+            if (requireController(ex) == null) {
                 return;
             }
             sendJson(ex, 200, GameStateJson.characterJson(characterName, runState));
@@ -221,7 +245,7 @@ public final class GameServer {
                 sendError(ex, 404, "NOT_FOUND", "接口不存在");
                 return;
             }
-            if (!requireRun(ex)) {
+            if (requireController(ex) == null) {
                 return;
             }
             sendJson(ex, 200, GameStateJson.deckJson(runState));
@@ -237,10 +261,10 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/map".equals(path) && "GET".equals(ex.getRequestMethod())) {
-                if (!requireRun(ex)) {
+                if (requireController(ex) == null) {
                     return;
                 }
-                sendJson(ex, 200, GameStateJson.mapJson(controller.getMapService()));
+                sendJson(ex, 200, mapStateJson());
                 return;
             }
             if ("/api/v1/map/advance".equals(path) && "POST".equals(ex.getRequestMethod())) {
@@ -254,8 +278,9 @@ public final class GameServer {
         }
     }
 
+    /** 进入节点：对任意节点类型都只做「进入」，结算交给各自端点。 */
     private void handleAdvance(HttpExchange ex) throws IOException {
-        if (!requireRun(ex)) {
+        if (requireController(ex) == null) {
             return;
         }
         String nodeIdRaw = Json.field(readBody(ex), "nodeId");
@@ -272,20 +297,8 @@ public final class GameServer {
         }
 
         try {
-            MapNode node = controller.selectNode(nodeId);
-            boolean battleNode = node.type() == MapNodeType.BATTLE
-                    || node.type() == MapNodeType.ELITE
-                    || node.type() == MapNodeType.BOSS;
-            if (!battleNode) {
-                if (node.type() == MapNodeType.REST) {
-                    // 休息：恢复 30% 最大生命（至少 1 点）
-                    Player player = runState.getPlayer();
-                    player.heal(Math.max(1, player.getMaxHealth() * 30 / 100));
-                }
-                // 事件 / 商店 / 休息：一次性「进入 + 结算」，回到地图阶段
-                controller.onLevelFinished(LevelResult.COMPLETED);
-            }
-            sendJson(ex, 200, GameStateJson.mapJson(controller.getMapService()));
+            controller.selectNode(nodeId);
+            sendJson(ex, 200, mapStateJson());
         } catch (IllegalArgumentException | IllegalStateException e) {
             sendError(ex, 400, "INVALID_NODE", e.getMessage());
         }
@@ -297,7 +310,7 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/blessing".equals(path) && "GET".equals(ex.getRequestMethod())) {
-                if (!requireRun(ex)) {
+                if (requireController(ex) == null) {
                     return;
                 }
                 sendJson(ex, 200, blessingStateJson());
@@ -327,7 +340,7 @@ public final class GameServer {
     }
 
     private void handleChooseBlessing(HttpExchange ex) throws IOException {
-        if (!requireRun(ex)) {
+        if (requireController(ex) == null) {
             return;
         }
         if (controller.getPhase() != GamePhase.BLESSING) {
@@ -367,7 +380,7 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/reward".equals(path) && "GET".equals(ex.getRequestMethod())) {
-                if (!requireRun(ex)) {
+                if (requireController(ex) == null) {
                     return;
                 }
                 sendJson(ex, 200, rewardStateJson());
@@ -392,7 +405,7 @@ public final class GameServer {
     }
 
     private void handleSelectReward(HttpExchange ex) throws IOException {
-        if (!requireRun(ex)) {
+        if (requireController(ex) == null) {
             return;
         }
         String cardId = Json.field(readBody(ex), "cardId"); // null = 跳过
@@ -420,7 +433,7 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/shop".equals(path) && "GET".equals(ex.getRequestMethod())) {
-                if (!requireRun(ex)) {
+                if (requireController(ex) == null) {
                     return;
                 }
                 sendJson(ex, 200, shopStateJson());
@@ -428,6 +441,14 @@ public final class GameServer {
             }
             if ("/api/v1/shop/buy".equals(path) && "POST".equals(ex.getRequestMethod())) {
                 handleBuy(ex);
+                return;
+            }
+            if ("/api/v1/shop/remove".equals(path) && "POST".equals(ex.getRequestMethod())) {
+                handleRemove(ex);
+                return;
+            }
+            if ("/api/v1/shop/leave".equals(path) && "POST".equals(ex.getRequestMethod())) {
+                handleLeaveShop(ex);
                 return;
             }
             sendError(ex, 404, "NOT_FOUND", "接口不存在");
@@ -438,48 +459,78 @@ public final class GameServer {
     }
 
     private String shopStateJson() {
-        return GameStateJson.shopJson(runState.getGold(), SHOP_ITEMS, soldItems);
+        if (controller.getPhase() != GamePhase.SHOP) {
+            return GameStateJson.emptyShopJson();
+        }
+        return GameStateJson.shopJson(
+                runState.getGold(),
+                controller.getCurrentShopItems(),
+                controller.getShopRemovableCards(),
+                controller.isShopCardRemovalUsed(),
+                ShopService.CARD_REMOVAL_PRICE);
     }
 
     private void handleBuy(HttpExchange ex) throws IOException {
-        if (!requireRun(ex)) {
+        if (requireController(ex) == null) {
             return;
         }
         String itemId = Json.field(readBody(ex), "itemId");
-        ShopItem item = SHOP_ITEMS.stream()
-                .filter(it -> it.id().equals(itemId))
-                .findFirst()
-                .orElse(null);
-        if (item == null) {
-            sendError(ex, 400, "INVALID_ITEM", "商品不存在");
+        if (itemId == null) {
+            sendError(ex, 400, "INVALID_ITEM", "缺少 itemId");
             return;
         }
-        if (soldItems.contains(item.id())) {
-            sendError(ex, 400, "ITEM_SOLD", "商品已售出");
+        ShopActionResult result;
+        try {
+            result = controller.buyShopItem(itemId);
+        } catch (IllegalStateException e) {
+            sendError(ex, 400, "INVALID_ITEM", e.getMessage());
             return;
         }
-        if (!runState.spendGold(item.price())) {
-            sendError(ex, 400, "NOT_ENOUGH_GOLD", "金币不足");
-            return;
+        if (result == ShopActionResult.SUCCESS) {
+            sendJson(ex, 200, shopStateJson());
+        } else {
+            sendError(ex, 400, result.name(), messageFor(result));
         }
+    }
 
-        switch (item.kind()) {
-            case "CARD" -> runState.addCard(
-                    new CardInstance(UUID.randomUUID().toString(), item.card()));
-            case "RELIC" -> {
-                Relic relic = RelicLibrary.create(item.id());
-                if (!controller.getRelicService().acquire(relic)) {
-                    runState.addGold(item.price());
-                    sendError(ex, 400, "ITEM_SOLD", "已持有该遗物");
-                    return;
-                }
-            }
-            case "POTION" -> runState.getPlayer().heal(10); // 治疗药水：恢复 10 点生命
-            case "SERVICE" -> { /* 移除卡需要前端选卡，MVP 暂不结算 */ }
-            default -> { }
+    // 原来这里有一段按 item.kind() 手动结算购买效果的 switch（CARD/RELIC/POTION/SERVICE），
+    // 那是 dev 把商店换成 ShopService 之前的写法。现在购买统一走
+    // `controller.buyShopItem(itemId)`（见上面的 handleBuy），效果在 ShopService 里结算，
+    // 这里不再需要。遗物/药水的支持由 ShopService + ShopItem 提供（#100 加的）。
+    private void handleRemove(HttpExchange ex) throws IOException {
+        if (requireController(ex) == null) {
+            return;
         }
-        soldItems.add(item.id());
-        sendJson(ex, 200, shopStateJson());
+        String cardId = Json.field(readBody(ex), "cardId");
+        if (cardId == null) {
+            sendError(ex, 400, "INVALID_CARD", "缺少 cardId");
+            return;
+        }
+        ShopActionResult result;
+        try {
+            result = controller.removeCardAtShop(cardId);
+        } catch (IllegalStateException e) {
+            sendError(ex, 400, "INVALID_CARD", e.getMessage());
+            return;
+        }
+        if (result == ShopActionResult.SUCCESS) {
+            sendJson(ex, 200, shopStateJson());
+        } else {
+            sendError(ex, 400, result.name(), messageFor(result));
+        }
+    }
+
+    private void handleLeaveShop(HttpExchange ex) throws IOException {
+        if (requireController(ex) == null) {
+            return;
+        }
+        try {
+            controller.leaveShop();
+        } catch (IllegalStateException e) {
+            sendError(ex, 400, "INVALID_ACTION", e.getMessage());
+            return;
+        }
+        sendJson(ex, 200, mapStateJson());
     }
 
     // ============ 事件 ============
@@ -488,10 +539,12 @@ public final class GameServer {
         try {
             String path = ex.getRequestURI().getPath();
             if ("/api/v1/event".equals(path) && "GET".equals(ex.getRequestMethod())) {
-                if (!requireRun(ex)) {
+                if (requireController(ex) == null) {
                     return;
                 }
-                sendJson(ex, 200, GameStateJson.eventJson());
+                sendJson(ex, 200, GameStateJson.eventJson(
+                        controller.getCurrentEvent().orElse(null),
+                        controller.getCurrentEventChoices()));
                 return;
             }
             if ("/api/v1/event/choose".equals(path) && "POST".equals(ex.getRequestMethod())) {
@@ -506,30 +559,76 @@ public final class GameServer {
     }
 
     private void handleChoose(HttpExchange ex) throws IOException {
-        if (!requireRun(ex)) {
+        if (requireController(ex) == null) {
             return;
         }
-        String choiceId = Json.field(readBody(ex), "choiceId"); // null = 离开
+        String choiceId = Json.field(readBody(ex), "choiceId");
         if (choiceId == null) {
-            sendJson(ex, 200, "{}");
+            choiceId = "leave"; // 兼容前端「离开」按钮发 null；事件目录统一用 leave 作为离开选项
+        }
+        EventChoiceResult result;
+        try {
+            result = controller.chooseEventChoice(choiceId);
+        } catch (IllegalStateException e) {
+            sendError(ex, 400, "INVALID_CHOICE", e.getMessage());
             return;
         }
-        Player player = runState.getPlayer();
-        switch (choiceId) {
-            case "offer" -> runState.addCard(
-                    new CardInstance(UUID.randomUUID().toString(), CardLibrary.STRIKE));
-            case "pray" -> player.heal(5);
-            case "shatter" -> {
-                player.takeDamage(5);
-                if (player.isDead()) {
-                    player.setHealth(1); // 至少保留 1 点生命
-                }
-                runState.addGold(50);
-            }
-            case "touch" -> { /* 条件不足，前端已禁用 */ }
-            default -> { }
+        if (result.succeeded()) {
+            sendJson(ex, 200, mapStateJson());
+        } else {
+            sendError(ex, 400, result.status().name(), result.message());
         }
-        sendJson(ex, 200, "{}");
+    }
+
+    // ============ 篝火 ============
+
+    private void handleCampfire(HttpExchange ex) throws IOException {
+        try {
+            String path = ex.getRequestURI().getPath();
+            if ("/api/v1/campfire".equals(path) && "GET".equals(ex.getRequestMethod())) {
+                if (requireController(ex) == null) {
+                    return;
+                }
+                sendJson(ex, 200, GameStateJson.campfireJson(
+                        controller.getCurrentCampfireActions(),
+                        controller.getCampfireUpgradeableCards()));
+                return;
+            }
+            if ("/api/v1/campfire/act".equals(path) && "POST".equals(ex.getRequestMethod())) {
+                handleCampfireAct(ex);
+                return;
+            }
+            sendError(ex, 404, "NOT_FOUND", "接口不存在");
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendError(ex, 500, "INTERNAL_ERROR", "服务器内部错误");
+        }
+    }
+
+    private void handleCampfireAct(HttpExchange ex) throws IOException {
+        if (requireController(ex) == null) {
+            return;
+        }
+        String body = readBody(ex);
+        String actionId = Json.field(body, "actionId");
+        String cardId = Json.field(body, "cardId");
+        CampfireActionResult result;
+        try {
+            result = switch (actionId == null ? "" : actionId) {
+                case "rest" -> controller.restAtCampfire();
+                case "smith" -> controller.smithAtCampfire(cardId);
+                case "leave" -> controller.leaveCampfire();
+                default -> throw new IllegalArgumentException("未知的篝火操作：" + actionId);
+            };
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            sendError(ex, 400, "INVALID_ACTION", e.getMessage());
+            return;
+        }
+        if (result.succeeded()) {
+            sendJson(ex, 200, mapStateJson());
+        } else {
+            sendError(ex, 400, result.status().name(), result.message());
+        }
     }
 
     // ============ 战斗 ============
@@ -540,7 +639,7 @@ public final class GameServer {
             String method = ex.getRequestMethod();
 
             if (PREFIX_BATTLES.equals(path) && "POST".equals(method)) {
-                if (!requireRun(ex)) {
+                if (requireController(ex) == null) {
                     return;
                 }
                 handleStartBattle(ex);
@@ -565,6 +664,8 @@ public final class GameServer {
                         handlePlay(ex, id);
                     } else if ("POST".equals(method) && "end-turn".equals(action)) {
                         handleEndTurn(ex, id);
+                    } else if ("GET".equals(method) && "piles".equals(action)) {
+                        handlePiles(ex, id);
                     } else {
                         sendError(ex, 404, "NOT_FOUND", "接口不存在");
                     }
@@ -598,6 +699,15 @@ public final class GameServer {
         sendJson(ex, 200, BattleStateJson.toJson(battleId, combat, List.of()));
     }
 
+    /** 抽牌堆 / 弃牌堆的牌面内容，供战斗界面点开堆时按需拉取（战斗状态里只有数量）。 */
+    private void handlePiles(HttpExchange ex, String id) throws IOException {
+        Combat combat = requireCombat(ex, id);
+        if (combat == null) {
+            return;
+        }
+        sendJson(ex, 200, BattleStateJson.pilesDetailJson(combat));
+    }
+
     private void handlePlay(HttpExchange ex, String id) throws IOException {
         Combat combat = requireCombat(ex, id);
         if (combat == null) {
@@ -627,7 +737,7 @@ public final class GameServer {
 
     /** 按 battleId 校验并取当前战斗；无效时返回 null 并已写出 404。 */
     private Combat requireCombat(HttpExchange ex, String id) throws IOException {
-        if (battleId == null || !battleId.equals(id)) {
+        if (controller == null || battleId == null || !battleId.equals(id)) {
             sendError(ex, 404, "BATTLE_NOT_FOUND", "战斗不存在或已过期");
             return null;
         }
@@ -644,6 +754,14 @@ public final class GameServer {
         sendJson(ex, 200, BattleStateJson.toJson(battleId, combat, logs));
     }
 
+    // ============ 状态助手 ============
+
+    private String mapStateJson() {
+        return GameStateJson.mapJson(controller.getMapService());
+    }
+
+    // ============ 错误信息 ============
+
     private static String messageFor(PlayCardResult result) {
         return switch (result) {
             case NOT_PLAYER_TURN -> "当前不是玩家回合";
@@ -651,6 +769,18 @@ public final class GameServer {
             case NOT_ENOUGH_ENERGY -> "能量不足";
             case CARD_NOT_PLAYABLE -> "该牌不可打出";
             case BATTLE_FINISHED -> "战斗已结束";
+            case SUCCESS -> "成功";
+        };
+    }
+
+    private static String messageFor(ShopActionResult result) {
+        return switch (result) {
+            case ITEM_NOT_FOUND -> "商品不存在";
+            case ITEM_ALREADY_SOLD -> "商品已售出";
+            case CARD_NOT_FOUND -> "牌组中不存在该卡牌";
+            case INSUFFICIENT_GOLD -> "金币不足";
+            case CARD_REMOVAL_ALREADY_USED -> "本商店已删除过卡牌";
+            case SHOP_CLOSED -> "商店已关闭";
             case SUCCESS -> "成功";
         };
     }
