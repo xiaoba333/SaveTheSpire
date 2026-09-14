@@ -245,6 +245,9 @@ public final class GameStateJson {
             }
             com.roguelike.dungeon.game.shop.ShopItem item = availableItems.get(i);
             if (item.isRelic()) {
+                // 内嵌一份 relic，形状与 characterJson 里的 relics 一致 —— 前端要拿
+                // relic.id 去 RelicTheme 取图标。商品自己的 id（shop-relic-1）是购买时
+                // 回传用的槽位号，不是遗物 id，两者不能混。
                 sb.append("{\"id\":").append(Json.str(item.id()))
                   .append(",\"name\":").append(Json.str(item.relic().name()))
                   .append(",\"kind\":\"RELIC\"")
@@ -253,6 +256,10 @@ public final class GameStateJson {
                   .append(",\"rarity\":").append(Json.str(item.relic().rarity().name()))
                   .append(",\"sold\":false")
                   .append(",\"card\":null")
+                  .append(",\"relic\":{\"id\":").append(Json.str(item.relic().id()))
+                  .append(",\"name\":").append(Json.str(item.relic().name()))
+                  .append(",\"description\":").append(Json.str(item.relic().description()))
+                  .append(",\"icon\":null}")
                   .append('}');
                 continue;
             }
