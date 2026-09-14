@@ -584,6 +584,8 @@ public final class GameServer {
                         handlePlay(ex, id);
                     } else if ("POST".equals(method) && "end-turn".equals(action)) {
                         handleEndTurn(ex, id);
+                    } else if ("GET".equals(method) && "piles".equals(action)) {
+                        handlePiles(ex, id);
                     } else {
                         sendError(ex, 404, "NOT_FOUND", "接口不存在");
                     }
@@ -615,6 +617,15 @@ public final class GameServer {
         }
         // 查询不产生操作，newLogs 固定为空，也不 drain，避免吃掉下一次操作的增量日志。
         sendJson(ex, 200, BattleStateJson.toJson(battleId, combat, List.of()));
+    }
+
+    /** 抽牌堆 / 弃牌堆的牌面内容，供战斗界面点开堆时按需拉取（战斗状态里只有数量）。 */
+    private void handlePiles(HttpExchange ex, String id) throws IOException {
+        Combat combat = requireCombat(ex, id);
+        if (combat == null) {
+            return;
+        }
+        sendJson(ex, 200, BattleStateJson.pilesDetailJson(combat));
     }
 
     private void handlePlay(HttpExchange ex, String id) throws IOException {

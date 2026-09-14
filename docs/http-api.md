@@ -51,6 +51,7 @@
 | `POST` | `/api/v1/battles/{battleId}/play` | 打出手牌中某张牌（按 cardId，可选带目标） |
 | `POST` | `/api/v1/battles/{battleId}/end-turn` | 玩家结束回合（后端同步执行怪物行动） |
 | `GET`  | `/api/v1/battles/{battleId}` | 查询当前战斗状态（重连 / 刷新用） |
+| `GET`  | `/api/v1/battles/{battleId}/piles` | 查看抽牌堆 / 弃牌堆的牌面内容（点开牌堆时按需拉取） |
 
 > 每次操作接口都返回完整 `BattleState`，Unity 拿到响应直接整屏刷新。
 
@@ -232,6 +233,24 @@ POST /api/v1/battles/{battleId}/end-turn
 GET /api/v1/battles/{battleId}
 响应 200：BattleState
 ```
+
+### 4.6 查看牌堆内容
+
+```
+GET /api/v1/battles/{battleId}/piles
+响应 200：
+{
+  "draw":    [ CardInstance, ... ],
+  "discard": [ CardInstance, ... ]
+}
+```
+
+`BattleState.piles` 只带三个堆的**数量**——每出一张牌都会拉一次战斗状态，把整堆牌都塞进去是白白的流量。
+牌面内容只在玩家点开堆的时候用这个端点单独取一次，元素与手牌同构（见 §4.1 的 card 字段）。
+
+顺序：`draw` 的下一张在数组末尾，`discard` 最近弃入的在数组末尾。
+
+错误：战斗编号不存在或已过期 → `404`，体为 `{"code":"BATTLE_NOT_FOUND","message":"战斗不存在或已过期"}`（与 `/play`、`/end-turn` 同一套）。
 
 ---
 

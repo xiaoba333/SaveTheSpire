@@ -165,13 +165,37 @@ public final class BattleStateJson {
     }
 
     private static String handJson(Combat c) {
-        List<CardInstance> hand = c.getHand();
-        StringBuilder sb = new StringBuilder(hand.size() * 64);
-        for (int i = 0; i < hand.size(); i++) {
+        return cardListInner(c.getHand());
+    }
+
+    /**
+     * 「查看抽牌堆 / 弃牌堆」界面用的牌堆内容。
+     *
+     * <p>战斗状态里只带三个堆的<b>数量</b>（见 {@link #pilesJson}），因为每出一张牌都会
+     * 拉一次战斗状态，把整堆牌都塞进去是白白的流量。内容只在玩家点开堆的时候单独取一次。</p>
+     */
+    public static String pilesDetailJson(Combat c) {
+        return "{\"draw\":" + cardListJson(c.getDrawPileInstances())
+                + ",\"discard\":" + cardListJson(c.getDiscardPileInstances())
+                + "}";
+    }
+
+    /** 卡牌数组，自带方括号——给整体返回的接口用（如牌堆内容）。 */
+    private static String cardListJson(List<CardInstance> cards) {
+        return "[" + cardListInner(cards) + "]";
+    }
+
+    /**
+     * 逗号分隔的卡牌列表内容，<b>不带方括号</b>，由调用方自己拼。
+     * {@code toJson} 里的 hand / enemies 都是「调用方加括号」的写法，别在这里重复加。
+     */
+    private static String cardListInner(List<CardInstance> cards) {
+        StringBuilder sb = new StringBuilder(cards.size() * 64);
+        for (int i = 0; i < cards.size(); i++) {
             if (i > 0) {
                 sb.append(',');
             }
-            sb.append(cardJson(hand.get(i)));
+            sb.append(cardJson(cards.get(i)));
         }
         return sb.toString();
     }
