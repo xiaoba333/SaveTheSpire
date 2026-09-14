@@ -92,7 +92,7 @@ class MonsterAiTest {
         assertTrue(combat.getMonsterName().contains("轻微破裂"));
         assertEquals(20, combat.getMonsterMaxHp());
         assertEquals(20, combat.getMonsterHp());
-        assertEquals(1, ai.monster().statusStacks(StatusIds.METAMORPHOSIS));
+        assertEquals(0, ai.monster().statusStacks(StatusIds.METAMORPHOSIS));
         assertEquals(0, ai.monster().getStrength());
     }
 
@@ -108,6 +108,21 @@ class MonsterAiTest {
         assertEquals(20, combat.getMonsterMaxHp());
         assertEquals(1, ai.monster().statusStacks(StatusIds.METAMORPHOSIS));
         assertEquals(0, ai.monster().getStrength());
+    }
+
+    @Test
+    void hiredMercenarySkipsAlmostCrackedEggPhase() {
+        ScriptedMonsterAi ai = ScriptedMonsterAi.of("kairos_egg_1", true);
+        Combat combat = combatWith(ai);
+
+        for (int i = 0; i < 3; i++) {
+            combat.endPlayerTurn();
+        }
+
+        assertEquals("凯洛斯", combat.getMonsterName());
+        assertEquals(0, ai.monster().statusStacks(StatusIds.METAMORPHOSIS));
+        assertEquals(3, ai.monster().getStrength());
+        assertFalse(combat.isFinished());
     }
 
     @Test

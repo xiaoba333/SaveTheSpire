@@ -13,11 +13,13 @@ public final class EventCatalog {
     private static final int SPRING_HEAL = 10;
     private static final int ALTAR_HEALTH_COST = 3;
     private static final int ALTAR_GOLD = 50;
+    private static final int MERCENARY_GOLD = 50;
 
     private static final List<EventDefinition> EVENTS = List.of(
             abandonedChest(),
             quietSpring(),
-            bloodAltar());
+            bloodAltar(),
+            distressedMercenary());
 
     private EventCatalog() {
     }
@@ -30,6 +32,18 @@ public final class EventCatalog {
         Objects.requireNonNull(runState, "单局状态不能为 null");
         Objects.requireNonNull(finishHandler, "关卡结束处理器不能为 null");
         EventDefinition definition = EVENTS.get(new Random(eventSeed).nextInt(EVENTS.size()));
+        return new EventService(runState, definition, finishHandler);
+    }
+
+    /** 按编号打开指定事件，供测试使用。 */
+    static EventService openNamedEvent(
+            RunState runState,
+            String eventId,
+            LevelFinishHandler finishHandler) {
+        EventDefinition definition = EVENTS.stream()
+                .filter(event -> event.event().id().equals(eventId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("未知事件: " + eventId));
         return new EventService(runState, definition, finishHandler);
     }
 
@@ -92,6 +106,34 @@ public final class EventCatalog {
                                             + " 点生命，并获得 " + ALTAR_GOLD + " 金币。";
                                 }),
                         leaveChoice()));
+    }
+
+    private static EventDefinition distressedMercenary() {
+        return new EventDefinition(
+                new GameEvent(
+                        "distressed_mercenary",
+                        "窘迫的雇佣兵",
+                        "一名囊中羞涩的雇佣兵拦下你，只要 50 金币，"
+                                + "就答应在凯洛斯的蛋进入「几乎破裂」时替你砸碎这一阶段。"),
+                List.of(
+                        new EventChoiceDefinition(
+                                "hire",
+                                "支付 50 金币",
+                                "雇佣他。Boss 进入几乎破裂阶段时，该阶段会被直接打破（不算破裂，蜕变不加层）。",
+                                state -> state.getGold() >= MERCENARY_GOLD,
+                                "金币不足 50。",
+                                state -> {
+                                    if (!state.spendGold(MERCENARY_GOLD)) {
+                                        return "你掏不出足够的金币。";
+                                    }
+                                    state.hireDistressedMercenary();
+                                    return "你付了 50 金币。雇佣兵点点头，说会在蛋几乎破裂时出现。";
+                                }),
+                        alwaysAvailableChoice(
+                                "leave",
+                                "转身离开",
+                                "不雇佣他，离开这里。",
+                                state -> "你转身离开了。")));
     }
 
     private static EventChoiceDefinition alwaysAvailableChoice(
