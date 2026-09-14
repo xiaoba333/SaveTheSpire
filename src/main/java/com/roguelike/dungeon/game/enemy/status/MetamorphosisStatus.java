@@ -1,14 +1,13 @@
 package com.roguelike.dungeon.game.enemy.status;
 
 /**
- * 蜕变（Boss 凯洛斯的成长状态）。
+ * 蜕变（Boss 凯洛斯蛋链的成长计数）。
  *
  * <p>设计案原文：<i>当蛋孵化时，每有一层蜕变，凯洛斯增加一点力量。</i></p>
  *
- * <p>因此它不改伤害、不改行动，只做一件事：把层数换算成
- * {@link #strengthBonus()}。{@link com.roguelike.dungeon.game.enemy.Monster#getStrength()}
- * 会把所有状态的加成求和，攻击意图里用 {@code 基础伤害 + 力量} 计算最终伤害——
- * 于是凯洛斯的「打0*9」在 4 层蜕变的加持下变成 9 段 4 点伤害。</p>
+ * <p>蛋形态只保留层数，不提供力量。本体破壳时由战斗 AI 把全部层数
+ * {@link com.roguelike.dungeon.game.enemy.Monster#addStrength(int) 转化为力量}，
+ * 于是凯洛斯的「打0*9」在 4 层蜕变下变成 9 段 4 点伤害。</p>
  */
 public final class MetamorphosisStatus extends StatusEffect {
 
@@ -18,7 +17,7 @@ public final class MetamorphosisStatus extends StatusEffect {
 
     @Override
     public int strengthBonus() {
-        return stacks();
+        return 0;
     }
 
     @Override

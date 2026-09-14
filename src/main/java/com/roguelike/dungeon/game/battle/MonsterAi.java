@@ -45,6 +45,15 @@ public interface MonsterAi {
      */
     MonsterTurnResult takeTurn(BattleState state);
 
+    /**
+     * 当前形态血量归零时尝试进入下一阶段。
+     *
+     * @return {@code true} 表示已变形且战斗继续，不应判胜
+     */
+    default boolean onHpDepleted(BattleState state) {
+        return false;
+    }
+
     /** 怪物意图快照。 */
     record IntentSnapshot(String type, int value) {
     }

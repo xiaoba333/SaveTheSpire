@@ -201,10 +201,11 @@ public final class Intents {
     }
 
     /**
-     * 破裂/孵化：杀死自身，并把 {@code metamorphosisPerHatch} 层「蜕变」带给下一个形态。
+     * 破裂/孵化：杀死自身，并把「蜕变」带给下一个形态。
      *
-     * <p>已累积的蜕变层数会被继承，因此「无暇 → 轻微破裂 → 中度破裂 → 几乎破裂 → 凯洛斯」
-     * 这条链走完后，凯洛斯身上正好带着 4 层蜕变（力量 +4）。</p>
+     * <p>蛋形态只保留蜕变层数；下一形态已是本体（没有再下一形态）时，
+     * 全部层数转化为力量。死亡结算清掉旧蛋状态也不影响这次转移：
+     * 层数在 {@code setHealth(0)} 之前读出。</p>
      *
      * @param metamorphosisPerHatch 本次破裂新增的蜕变层数
      * @param nextFormId            下一个形态的怪物定义 ID
@@ -220,13 +221,24 @@ public final class Intents {
             ctx.log("  " + eggName + " 破裂了！");
             Monster born = ctx.transform(self, nextForm);
             if (born != null) {
-                if (carried > 0) {
-                    born.applyStatus(StatusIds.METAMORPHOSIS, carried);
-                }
+                applyCarriedMetamorphosis(born, carried);
                 ctx.log("  " + born.displayName() + " 出现（" + born.getHealth() + "/"
                         + born.getMaxHealth() + "，力量 " + born.getStrength() + "）");
             }
         });
+    }
+
+    /** 蛋形态挂上蜕变；本体则把层数写成力量。 */
+    private static void applyCarriedMetamorphosis(Monster born, int carried) {
+        if (carried <= 0) {
+            return;
+        }
+        born.removeStatus(StatusIds.METAMORPHOSIS);
+        if (born.definition().nextFormId() != null) {
+            born.applyStatus(StatusIds.METAMORPHOSIS, carried);
+            return;
+        }
+        born.setBaseStrength(Math.max(born.baseStrength(), carried));
     }
 
     /** 自杀式撤离，例如蛋被提前打破但没有下一形态。 */
