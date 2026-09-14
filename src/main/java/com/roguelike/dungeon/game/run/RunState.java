@@ -26,6 +26,8 @@ public final class RunState {
     private int gold;
     private int currentAct;
     private MapService mapService;
+    /** 雇佣「窘迫的雇佣兵」后，Boss 进入几乎破裂阶段时直接打碎该阶段。 */
+    private boolean smashAlmostCrackedEgg;
 
     /**
      * 创建一局新游戏。
@@ -135,6 +137,15 @@ public final class RunState {
         }
         gold -= amount;
         return true;
+    }
+
+    /** 雇佣窘迫的雇佣兵：Boss 进入「几乎破裂」时直接打碎该阶段。 */
+    public void hireDistressedMercenary() {
+        smashAlmostCrackedEgg = true;
+    }
+
+    public boolean shouldSmashAlmostCrackedEgg() {
+        return smashAlmostCrackedEgg;
     }
 
     public long getRunSeed() {

@@ -276,7 +276,7 @@ public final class GameController implements LevelFinishHandler {
         return switch (node.type()) {
             case BATTLE -> MonsterCatalog.randomEasy(rewardSeed(node));
             case ELITE -> MonsterCatalog.elite();
-            case BOSS -> MonsterCatalog.boss();
+            case BOSS -> MonsterCatalog.boss(runState.shouldSmashAlmostCrackedEgg());
             default -> throw new IllegalStateException(
                     "非战斗节点无法选取怪物: " + node.type());
         };

@@ -101,6 +101,49 @@ class EventServiceTest {
     }
 
     @Test
+    void distressedMercenaryShouldRequireFiftyGold() {
+        RunState state = newRunState(50, 20);
+        EventService service = eventById("distressed_mercenary", state, result -> { });
+        EventChoice hire = service.getChoices().stream()
+                .filter(choice -> choice.id().equals("hire"))
+                .findFirst()
+                .orElseThrow();
+
+        EventChoiceResult result = service.choose("hire");
+
+        assertFalse(hire.available());
+        assertEquals(EventActionStatus.CHOICE_UNAVAILABLE, result.status());
+        assertEquals(20, state.getGold());
+        assertFalse(state.shouldSmashAlmostCrackedEgg());
+        assertFalse(service.isResolved());
+    }
+
+    @Test
+    void distressedMercenaryShouldSpendGoldAndMarkHire() {
+        RunState state = newRunState(50, 80);
+        EventService service = eventById("distressed_mercenary", state, result -> { });
+
+        EventChoiceResult result = service.choose("hire");
+
+        assertEquals(EventActionStatus.SUCCESS, result.status());
+        assertEquals(30, state.getGold());
+        assertTrue(state.shouldSmashAlmostCrackedEgg());
+    }
+
+    @Test
+    void distressedMercenaryCanLeaveWithoutSpending() {
+        RunState state = newRunState(50, 80);
+        EventService service = eventById("distressed_mercenary", state, result -> { });
+
+        EventChoiceResult result = service.choose("leave");
+
+        assertEquals(EventActionStatus.SUCCESS, result.status());
+        assertEquals(80, state.getGold());
+        assertFalse(state.shouldSmashAlmostCrackedEgg());
+        assertTrue(result.message().contains("转身离开"));
+    }
+
+    @Test
     void unknownChoiceShouldNotMutateOrCompleteEvent() {
         RunState state = newRunState(50, 9);
         AtomicInteger finishCount = new AtomicInteger();
@@ -120,13 +163,7 @@ class EventServiceTest {
             String eventId,
             RunState state,
             com.roguelike.dungeon.flow.LevelFinishHandler finishHandler) {
-        for (long seed = 0; seed < 100; seed++) {
-            EventService service = EventCatalog.openEvent(state, seed, finishHandler);
-            if (service.getEvent().id().equals(eventId)) {
-                return service;
-            }
-        }
-        throw new AssertionError("无法找到事件: " + eventId);
+        return EventCatalog.openNamedEvent(state, eventId, finishHandler);
     }
 
     private static RunState newRunState(int maxHealth, int gold) {

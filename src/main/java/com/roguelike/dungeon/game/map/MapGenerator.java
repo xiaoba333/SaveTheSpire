@@ -6,7 +6,7 @@ import java.util.Random;
 
 /** 创建可复现的基础关卡地图。 */
 public final class MapGenerator {
-    public static final int FLOOR_COUNT = 7;
+    public static final int FLOOR_COUNT = 14;
     public static final int COLUMN_COUNT = 3;
 
     /**

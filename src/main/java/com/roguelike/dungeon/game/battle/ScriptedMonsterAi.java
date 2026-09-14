@@ -11,7 +11,6 @@ import com.roguelike.dungeon.game.enemy.MonsterDefinition;
 import com.roguelike.dungeon.game.enemy.bestiary.ActOneBestiary;
 import com.roguelike.dungeon.game.enemy.intent.Intent;
 import com.roguelike.dungeon.game.enemy.intent.IntentType;
-import com.roguelike.dungeon.game.enemy.intent.Intents;
 import com.roguelike.dungeon.game.enemy.status.StatusIds;
 
 import java.util.List;
@@ -26,20 +25,34 @@ import java.util.UUID;
  */
 public final class ScriptedMonsterAi implements MonsterAi {
 
+    private static final String ALMOST_CRACKED_EGG_ID = "kairos_egg_4";
+
     private Monster monster;
     private BattleState boundState;
     private final Random random = new Random();
     /** 蛋链累积的蜕变层数，不跟蛋实例走，避免破裂死亡把状态清掉。 */
     private int metamorphosisStacks;
+    /** 雇佣兵契约：进入几乎破裂阶段时立刻打碎，不单独出场雇佣兵。 */
+    private final boolean smashAlmostCrackedEgg;
 
     public static ScriptedMonsterAi of(String monsterId) {
+        return of(monsterId, false);
+    }
+
+    public static ScriptedMonsterAi of(String monsterId, boolean smashAlmostCrackedEgg) {
         ActOneBestiary.init();
         return new ScriptedMonsterAi(
-                new Monster(com.roguelike.dungeon.game.enemy.MonsterCatalog.require(monsterId)));
+                new Monster(com.roguelike.dungeon.game.enemy.MonsterCatalog.require(monsterId)),
+                smashAlmostCrackedEgg);
     }
 
     public ScriptedMonsterAi(Monster monster) {
+        this(monster, false);
+    }
+
+    public ScriptedMonsterAi(Monster monster, boolean smashAlmostCrackedEgg) {
         this.monster = monster;
+        this.smashAlmostCrackedEgg = smashAlmostCrackedEgg;
     }
 
     public Monster monster() {
@@ -100,6 +113,7 @@ public final class ScriptedMonsterAi implements MonsterAi {
         acting.takeTurn(ctx);
         if (monster != acting) {
             persistMetamorphosisAfterRupture();
+            smashAlmostCrackedEggIfHired(ctx);
             monster.planIntent(ctx);
         } else if (!monster.isDead()) {
             monster.onTurnEnd(ctx);
@@ -127,11 +141,11 @@ public final class ScriptedMonsterAi implements MonsterAi {
             return false;
         }
         Context ctx = new Context();
-        Intents.hatch(1, nextFormId).action().perform(monster, ctx);
-        if (monster.isDead()) {
+        // 玩家打碎蛋：进入下一形态，但不算破裂，蜕变不加层。
+        if (!advanceToForm(ctx, nextFormId)) {
             return false;
         }
-        persistMetamorphosisAfterRupture();
+        smashAlmostCrackedEggIfHired(ctx);
         monster.planIntent(ctx);
         state.bindLivingMonster(monster);
         state.syncFromLivingMonster();
@@ -139,11 +153,14 @@ public final class ScriptedMonsterAi implements MonsterAi {
     }
 
     /**
-     * 破裂后用 AI 自己记的层数重挂状态。旧蛋死亡时身上的蜕变可能已被清掉，
-     * 这里按「每次破裂 +1」累加，本体出场时一次性写成力量。
+     * 蛋自己回合「破裂」后累加蜕变。玩家打碎或雇佣兵砸碎都不要走这里。
      */
     private void persistMetamorphosisAfterRupture() {
         metamorphosisStacks++;
+        applyStoredMetamorphosis();
+    }
+
+    private void applyStoredMetamorphosis() {
         monster.removeStatus(StatusIds.METAMORPHOSIS);
         if (monster.definition().nextFormId() != null) {
             if (metamorphosisStacks > 0) {
@@ -152,6 +169,30 @@ public final class ScriptedMonsterAi implements MonsterAi {
         } else {
             monster.setBaseStrength(Math.max(monster.baseStrength(), metamorphosisStacks));
         }
+    }
+
+    /** 雇佣兵契约：几乎破裂一出场就立刻打碎。不算破裂，蜕变不加层。 */
+    private void smashAlmostCrackedEggIfHired(Context ctx) {
+        if (!smashAlmostCrackedEgg || !ALMOST_CRACKED_EGG_ID.equals(monster.id())) {
+            return;
+        }
+        String nextFormId = monster.definition().nextFormId();
+        if (nextFormId == null || nextFormId.isBlank()) {
+            return;
+        }
+        advanceToForm(ctx, nextFormId);
+    }
+
+    /** 换成下一形态并重挂已有蜕变，不加层。 */
+    private boolean advanceToForm(Context ctx, String nextFormId) {
+        MonsterDefinition nextForm =
+                com.roguelike.dungeon.game.enemy.MonsterCatalog.require(nextFormId);
+        monster = ctx.transform(monster, nextForm);
+        if (monster.isDead()) {
+            return false;
+        }
+        applyStoredMetamorphosis();
+        return true;
     }
 
     private final class Context implements BattleContext {

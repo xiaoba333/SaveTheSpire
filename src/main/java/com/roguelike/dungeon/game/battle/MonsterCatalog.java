@@ -38,7 +38,16 @@ public final class MonsterCatalog {
 
     /** Boss：从无暇蛋开始，破裂后进入凯洛斯体系。 */
     public static MonsterAi boss() {
+        return boss(false);
+    }
+
+    /**
+     * Boss。
+     *
+     * @param smashAlmostCrackedEgg true 时进入「几乎破裂」阶段会立刻打碎该阶段
+     */
+    public static MonsterAi boss(boolean smashAlmostCrackedEgg) {
         ActOneBestiary.init();
-        return ScriptedMonsterAi.of("kairos_egg_1");
+        return ScriptedMonsterAi.of("kairos_egg_1", smashAlmostCrackedEgg);
     }
 }
