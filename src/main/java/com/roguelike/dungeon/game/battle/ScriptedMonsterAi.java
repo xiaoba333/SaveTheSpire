@@ -89,15 +89,7 @@ public final class ScriptedMonsterAi implements MonsterAi {
         if (state.isFinished() || monster.isDead()) {
             return null;
         }
-        Intent intent = monster.plannedIntent();
-        if (intent == null) {
-            return null;
-        }
-        return switch (intent.type()) {
-            case ATTACK, ATTACK_DEBUFF -> new IntentSnapshot("ATTACK", 0);
-            case DEFEND, DEFEND_BUFF -> new IntentSnapshot("DEFEND", 0);
-            default -> new IntentSnapshot(intent.type().name(), 0);
-        };
+        return MonsterAi.snapshotOf(monster);
     }
 
     @Override

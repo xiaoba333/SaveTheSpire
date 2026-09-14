@@ -170,6 +170,7 @@ public final class ActOneExtraBestiary {
                     Intents.composite(IntentType.DEFEND_BUFF,
                             "防10，给予玩家 1 层虚弱",
                             Intents.ICON_DEFEND,
+                            10,   // 图标上的数字：格挡量
                             Intents.block(10).action(),
                             Intents.debuffPlayer(StatusIds.WEAK, 1).action()),
                     Intents.attack(7)))

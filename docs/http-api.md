@@ -110,13 +110,23 @@
 | `hp` / `maxHp` | int | 当前 / 上限生命 |
 | `armor` | int | 当前护甲 |
 | `energy` / `maxEnergy` | int? | 仅玩家有，敌人返回 `0` |
-| `intent` | Intent? | 仅敌人有，玩家返回 `null` |
+| `intent` | Intent? | 仅敌人有，玩家返回 `null`。`{type, value}` 见下表 |
 | `index` | int? | **仅敌人**。敌人下标，传给 `/target` 或 `play` 的 `targetIndex` |
 | `id` | string? | **仅敌人**。怪物定义 id，用于取立绘；也可作为 `targetId` |
 | `name` | string? | **仅敌人**。显示名，同名敌人靠 `index` 区分 |
 | `strength` | int? | **仅敌人**。当前力量（含状态加成） |
 | `alive` | bool? | **仅敌人**。是否存活；死亡的敌人不能再被选为目标 |
 | `targeted` | bool? | **仅敌人**。是否为玩家当前锁定的攻击目标，前端据此高亮 |
+
+#### intent 的两个字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | string | `ATTACK` / `DEFEND` / `ATTACK_DEBUFF` / `DEFEND_BUFF` / `BUFF` / `DEBUFF` / `HEAL` / `SPECIAL` / `UNKNOWN`。脚本怪 AI 目前把组合意图塌缩成 `ATTACK` / `DEFEND` |
+| `value` | int | 叠在意图图标上的数字：攻击是**伤害（含力量）**、防御是格挡量、削弱是层数、回复是回血量。**0 表示没有数字可显示**，前端不画（不是「显示 0」） |
+
+> `value` 2026-09-14 之前恒为 0（脚本怪 AI 的 `IntentSnapshot` 硬编码），所以前端那排意图数字一直不显示。
+> 现在由 `MonsterAi.snapshotOf` 从意图自身声明的 `Intent.amount()` 取值，攻击再补上怪物当前力量。
 
 ### 3.3 CardInstance（手牌中的一张牌实例）
 
