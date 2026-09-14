@@ -123,6 +123,11 @@ public final class CombatCardEffectContext implements CardEffectContext {
     }
 
     @Override
+    public int getPlayerBlock() {
+        return player.getArmor();
+    }
+
+    @Override
     public int getPlayerMaxHealth() {
         return player.getMaxHealth();
     }

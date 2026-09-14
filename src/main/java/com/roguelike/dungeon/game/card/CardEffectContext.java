@@ -42,6 +42,9 @@ public interface CardEffectContext {
     /** 玩家当前生命值。 */
     int getPlayerHealth();
 
+    /** 玩家当前格挡值。 */
+    int getPlayerBlock();
+
     /** 玩家当前最大生命值。 */
     int getPlayerMaxHealth();
 
