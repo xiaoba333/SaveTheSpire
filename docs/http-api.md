@@ -269,7 +269,8 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 | `GET`  | `/api/v1/runs` | 查询当前局阶段和角色状态 |
 | `GET`  | `/api/v1/map` | 拉取整张地图 |
 | `POST` | `/api/v1/map/advance` | 推进节点（战斗类=进入，非战斗类=进入+结算） |
-| `GET`  | `/api/v1/reward` | 拉取当前战斗奖励 |
+| `GET`  | `/api/v1/blessing` | 拉取开局房间三个馈赠 |
+| `POST` | `/api/v1/blessing/choose` | 选择馈赠（删卡/升级时附带 cardId） |
 | `POST` | `/api/v1/reward/select` | 选择一张奖励卡（cardId=null 表示跳过） |
 | `GET`  | `/api/v1/shop` | 拉取商店状态 |
 | `POST` | `/api/v1/shop/buy` | 购买一件商品 |
@@ -314,7 +315,15 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 // POST /api/v1/runs  请求 { "characterId":"warrior", "seed":12345, "actCount":1 }
 // seed / actCount 可省略。隐藏角色可传 characterId=god。
 // 响应 RunState：
-{ "phase":"MAP", "character": { "name":"铁血战士","hp":50,"maxHp":50,"gold":0,"relics":[] } }
+{ "phase":"BLESSING", "character": { "name":"铁血战士","hp":50,"maxHp":50,"gold":0,"relics":[] } }
+
+// GET /api/v1/blessing → 开局房间三个随机馈赠
+{ "title":"开局房间", "description":"...", "awaitingCard":false,
+  "options":[ { "id":"gold","label":"获得 100 金币","requiresCard":false,"available":true } ],
+  "targetCards":[] }
+
+// POST /api/v1/blessing/choose  请求 { "optionId":"gold", "cardId": null }
+// 删卡 / 升级需再传 cardId（牌组实例 id）。成功后 phase 变为 MAP。
 
 // GET /api/v1/map → MapState
 { "nodes": [ { "id":"0","type":"BATTLE","column":0,"row":0,"state":"SELECTABLE","nextIds":["3"] } ],
@@ -323,7 +332,8 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 // POST /api/v1/map/advance  请求 { "nodeId": "0" }  → MapState
 
 // GET /api/v1/reward → RewardState
-{ "gold": 20, "cardChoices": [ /* CardInstance */ ] }
+{ "gold": 20, "cardChoices": [ /* CardInstance */ ], "relic": null }
+// Boss 战后为 150 金、仅稀有卡，并附带 relic「高塔之匙」
 
 // POST /api/v1/reward/select  请求 { "cardId": "quick_slash" }（null=跳过） → RewardState（选完返回空）
 

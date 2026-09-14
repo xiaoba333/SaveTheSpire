@@ -89,16 +89,16 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> MAP: createRun 后
+    [*] --> BLESSING: createRun 后
+    BLESSING --> MAP: 领取一个开局馈赠
     MAP --> BATTLE: 选 BATTLE/ELITE/BOSS 节点
     MAP --> EVENT: 选 EVENT 节点
     MAP --> REST: 选 REST 节点
     MAP --> SHOP: 选 SHOP 节点
-    BATTLE --> REWARD: 普通/精英战胜利
-    BATTLE --> MAP: Boss 胜利且还有下一章
-    BATTLE --> VICTORY: Boss 胜利且已是最后一章
+    BATTLE --> REWARD: 普通/精英/Boss 战胜利
     BATTLE --> DEFEAT: 玩家死亡
-    REWARD --> MAP: 领卡或跳过
+    REWARD --> MAP: 领卡或跳过（Boss 后可能进下一章）
+    REWARD --> VICTORY: 最后一章 Boss 领奖
     EVENT --> MAP: 选项结算成功
     EVENT --> DEFEAT: 事件导致失败
     REST --> MAP: 休息 / 锻造 / 离开
@@ -110,13 +110,16 @@ stateDiagram-v2
 
 | 当前 | 触发 | 守卫 | 下一状态 | 副作用 |
 | --- | --- | --- | --- | --- |
+| BLESSING | `chooseBlessing` / `chooseBlessingCard` 成功 | 阶段为 BLESSING | MAP | 删卡 / 升级 / 生命+6 / 金币 / 受伤换金 |
 | MAP | `selectNode(id)` 且类型为战斗类 | `canEnter(id)` | BATTLE | `CombatFactory.createForNode` |
 | MAP | `selectNode` 且 EVENT | 同上 | EVENT | `EventCatalog.openEvent` |
 | MAP | `selectNode` 且 REST | 同上 | REST | `new CampfireService` |
 | MAP | `selectNode` 且 SHOP | 同上 | SHOP | 仅切阶段（商店模块占位） |
 | BATTLE | 战斗结束 `COMPLETED` 且非 Boss | 当前在 BATTLE | REWARD | 生成 `RewardService` |
-| BATTLE | 战斗结束 `COMPLETED` 且 Boss | 还有下一章 | MAP | `advanceAct()` |
-| BATTLE | 战斗结束 `COMPLETED` 且 Boss | 已是最后一章 | VICTORY | 通关 |
+| BATTLE | 战斗结束 `COMPLETED` 且 Boss | 当前在 BATTLE | REWARD | 150 金 + 稀有卡 + 高塔之匙 |
+| REWARD | `claimRewardCard` / `skipRewardCard` 且刚打完 Boss | 还有下一章 | MAP | `completeCurrentNode` + `advanceAct()` |
+| REWARD | `claimRewardCard` / `skipRewardCard` 且刚打完 Boss | 已是最后一章 | VICTORY | 通关 |
+| REWARD | `claimRewardCard` / `skipRewardCard` 且非 Boss | 阶段为 REWARD | MAP | `completeCurrentNode` |
 | BATTLE | 战斗结束 `DEFEATED` | — | DEFEAT | 不 complete 当前节点 |
 | REWARD | `claimRewardCard` / `skipRewardCard` | 阶段为 REWARD | MAP | `completeCurrentNode` |
 | EVENT/REST/SHOP | `onLevelFinished(COMPLETED)` | 阶段匹配 | MAP | 解锁后继节点 |

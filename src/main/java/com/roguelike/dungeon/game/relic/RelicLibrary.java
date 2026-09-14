@@ -54,6 +54,7 @@ public final class RelicLibrary {
     public static final String GLASS_CANNON = "glass_cannon";
     public static final String GREEDY_CUP = "greedy_cup";
     public static final String DARK_PACT = "dark_pact";
+    public static final String TOWER_KEY = "tower_key";
 
     /**
      * 每局固定获得的初始遗物。
@@ -232,6 +233,13 @@ public final class RelicLibrary {
                     ctx.player().reduceMaxHealth(12);
                     ctx.player().addMaxEnergy(1);
                     ctx.log("「黑暗契约」触发：能量上限 +1，最大生命 -12。");
+                }));
+
+        register(TOWER_KEY, () -> new SimpleRelic(TOWER_KEY, "高塔之匙",
+                "更深度探索的钥匙......", RelicRarity.BOSS,
+                Set.of(),
+                (trigger, ctx) -> {
+                    // 占位遗物：目前没有战斗效果。
                 }));
     }
 

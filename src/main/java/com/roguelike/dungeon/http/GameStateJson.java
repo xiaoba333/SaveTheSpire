@@ -1,5 +1,6 @@
 package com.roguelike.dungeon.http;
 
+import com.roguelike.dungeon.game.blessing.BlessingOption;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.character.CharacterDefinition;
@@ -144,6 +145,48 @@ public final class GameStateJson {
         };
     }
 
+    // ---------- 开局房间 ----------
+
+    public static String blessingJson(
+            String title,
+            String description,
+            boolean awaitingCard,
+            List<BlessingOption> options,
+            List<CardInstance> targetCards) {
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"title\":").append(Json.str(title));
+        sb.append(",\"description\":").append(Json.str(description));
+        sb.append(",\"awaitingCard\":").append(awaitingCard);
+        sb.append(",\"options\":[");
+        for (int i = 0; i < options.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            BlessingOption option = options.get(i);
+            sb.append("{\"id\":").append(Json.str(option.id()))
+                    .append(",\"label\":").append(Json.str(option.label()))
+                    .append(",\"description\":").append(Json.str(option.description()))
+                    .append(",\"requiresCard\":").append(option.requiresCard())
+                    .append(",\"available\":").append(option.available())
+                    .append(",\"unavailableReason\":")
+                    .append(Json.str(option.unavailableReason()))
+                    .append('}');
+        }
+        sb.append("],\"targetCards\":[");
+        for (int i = 0; i < targetCards.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(cardInstanceJson(targetCards.get(i)));
+        }
+        sb.append("]}");
+        return sb.toString();
+    }
+
+    public static String emptyBlessingJson() {
+        return blessingJson("", "", false, List.of(), List.of());
+    }
+
     // ---------- 奖励 ----------
 
     public static String rewardJson(BattleReward reward) {
@@ -157,13 +200,23 @@ public final class GameStateJson {
             }
             sb.append(cardDefJson(choices.get(i), "COMMON"));
         }
-        sb.append("]}");
+        sb.append("]");
+        if (reward.hasRelic()) {
+            Relic relic = reward.relic();
+            sb.append(",\"relic\":{\"id\":").append(Json.str(relic.id()))
+                    .append(",\"name\":").append(Json.str(relic.name()))
+                    .append(",\"description\":").append(Json.str(relic.description()))
+                    .append(",\"icon\":null}");
+        } else {
+            sb.append(",\"relic\":null");
+        }
+        sb.append('}');
         return sb.toString();
     }
 
     /** 无待领取奖励（或已领取完）时的空奖励。 */
     public static String emptyRewardJson() {
-        return "{\"gold\":0,\"cardChoices\":[]}";
+        return "{\"gold\":0,\"cardChoices\":[],\"relic\":null}";
     }
 
     // ---------- 商店 ----------

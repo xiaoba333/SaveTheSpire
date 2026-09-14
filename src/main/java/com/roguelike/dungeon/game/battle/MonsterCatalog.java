@@ -6,7 +6,9 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * 按地图节点挑选第一章怪物：四种普通小怪、巨人遗骸、凯洛斯蛋链。
+ * 按地图节点挑选怪物：四种普通小怪、巨人遗骸、凯洛斯蛋链。
+ *
+ * <p>第二层暂与第一层共用同一图鉴。</p>
  */
 public final class MonsterCatalog {
 

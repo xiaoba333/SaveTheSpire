@@ -6,6 +6,8 @@ import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.flow.RunFactory;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
+import com.roguelike.dungeon.game.blessing.BlessingActionResult;
+import com.roguelike.dungeon.game.blessing.BlessingService;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.character.CharacterDefinition;
@@ -42,7 +44,7 @@ public final class GameServer {
 
     private static final String PREFIX_BATTLES = "/api/v1/battles";
 
-    private static final int DEFAULT_ACT_COUNT = 1;
+    private static final int DEFAULT_ACT_COUNT = 2;
 
     /** 固定商店库存（MVP）。 */
     private static final List<ShopItem> SHOP_ITEMS = List.of(
@@ -73,6 +75,7 @@ public final class GameServer {
         server.createContext("/api/v1/deck", withCors(this::handleDeck));
         server.createContext("/api/v1/map", withCors(this::handleMap));
         server.createContext("/api/v1/reward", withCors(this::handleReward));
+        server.createContext("/api/v1/blessing", withCors(this::handleBlessing));
         server.createContext("/api/v1/shop", withCors(this::handleShop));
         server.createContext("/api/v1/event", withCors(this::handleEvent));
         server.createContext("/api/v1/battles", withCors(this::handleBattle));
@@ -282,6 +285,76 @@ public final class GameServer {
         }
     }
 
+    // ============ 开局房间 ============
+
+    private void handleBlessing(HttpExchange ex) throws IOException {
+        try {
+            String path = ex.getRequestURI().getPath();
+            if ("/api/v1/blessing".equals(path) && "GET".equals(ex.getRequestMethod())) {
+                if (!requireRun(ex)) {
+                    return;
+                }
+                sendJson(ex, 200, blessingStateJson());
+                return;
+            }
+            if ("/api/v1/blessing/choose".equals(path) && "POST".equals(ex.getRequestMethod())) {
+                handleChooseBlessing(ex);
+                return;
+            }
+            sendError(ex, 404, "NOT_FOUND", "接口不存在");
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendError(ex, 500, "INTERNAL_ERROR", "服务器内部错误");
+        }
+    }
+
+    private String blessingStateJson() {
+        if (controller.getPhase() != GamePhase.BLESSING) {
+            return GameStateJson.emptyBlessingJson();
+        }
+        return GameStateJson.blessingJson(
+                BlessingService.TITLE,
+                BlessingService.DESCRIPTION,
+                controller.isBlessingAwaitingCard(),
+                controller.getCurrentBlessingOptions(),
+                controller.getBlessingTargetCards());
+    }
+
+    private void handleChooseBlessing(HttpExchange ex) throws IOException {
+        if (!requireRun(ex)) {
+            return;
+        }
+        if (controller.getPhase() != GamePhase.BLESSING) {
+            sendError(ex, 400, "WRONG_PHASE", "当前不是开局房间阶段");
+            return;
+        }
+        String body = readBody(ex);
+        String optionId = Json.field(body, "optionId");
+        String cardId = Json.field(body, "cardId");
+        if (optionId == null || optionId.isBlank()) {
+            sendError(ex, 400, "INVALID_OPTION", "缺少 optionId");
+            return;
+        }
+        try {
+            BlessingActionResult result = controller.chooseBlessing(optionId);
+            if (result.needsCard()) {
+                if (cardId == null || cardId.isBlank()) {
+                    sendJson(ex, 200, blessingStateJson());
+                    return;
+                }
+                result = controller.chooseBlessingCard(cardId);
+            }
+            if (!result.succeeded() && !result.needsCard()) {
+                sendError(ex, 400, result.status().name(), result.message());
+                return;
+            }
+            sendJson(ex, 200, GameStateJson.runJson(
+                    controller.getPhase().name(), characterName, runState));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            sendError(ex, 400, "INVALID_OPTION", e.getMessage());
+        }
+    }
+
     // ============ 奖励 ============
 
     private void handleReward(HttpExchange ex) throws IOException {
@@ -318,7 +391,7 @@ public final class GameServer {
         }
         String cardId = Json.field(readBody(ex), "cardId"); // null = 跳过
         if (controller.getPhase() != GamePhase.REWARD) {
-            // 无待领取奖励（如 Boss 战后）：无操作，返回空奖励
+            // 无待领取奖励：无操作，返回空奖励
             sendJson(ex, 200, GameStateJson.emptyRewardJson());
             return;
         }

@@ -2,6 +2,9 @@ package com.roguelike.dungeon.flow;
 
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
+import com.roguelike.dungeon.game.blessing.BlessingActionResult;
+import com.roguelike.dungeon.game.blessing.BlessingOption;
+import com.roguelike.dungeon.game.blessing.BlessingType;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
@@ -90,10 +93,11 @@ class RelicIntegrationTest {
     @Test
     void defeatStillHappensWhenPlayerHasAlmostNoHp() {
         RunState runState = newRunState(1, 12345L);
-        runState.getPlayer().setHealth(1);
         GameController controller = new GameController(
                 runState, REWARD_POOL, line -> { });
-        controller.selectNode(firstNodeId(controller));
+        int nodeId = firstNodeId(controller);
+        runState.getPlayer().setHealth(1);
+        controller.selectNode(nodeId);
 
         Combat combat = controller.getCurrentCombat().orElseThrow();
         // 怪物按种子随机挑选，且部分怪物首回合先叠甲；
@@ -112,10 +116,11 @@ class RelicIntegrationTest {
     @Test
     void battleEndRelicShouldHealPlayerAfterVictory() {
         RunState runState = newRunState(1, 12345L);
-        runState.getPlayer().setHealth(20);
         GameController controller = new GameController(
                 runState, REWARD_POOL, line -> { });
-        controller.selectNode(firstNodeId(controller));
+        int nodeId = firstNodeId(controller);
+        runState.getPlayer().setHealth(20);
+        controller.selectNode(nodeId);
 
         Combat combat = controller.getCurrentCombat().orElseThrow();
         // 记录最后一次出牌前的血量，作为「胜利瞬间血量」的近似基线
@@ -134,7 +139,7 @@ class RelicIntegrationTest {
         // 绷带：胜利后回复 5 点生命（若胜利时已残血，应能观察到回血效果）
         assertTrue(hpAfter >= hpBeforeVictory,
                 "胜利后血量不应低于胜利瞬间：before=" + hpBeforeVictory + " after=" + hpAfter);
-        assertTrue(hpAfter <= Combat.PLAYER_MAX_HP);
+        assertTrue(hpAfter <= runState.getPlayer().getMaxHealth());
     }
 
     @Test
@@ -197,8 +202,30 @@ class RelicIntegrationTest {
     }
 
     private static int firstNodeId(GameController controller) {
+        completeOpeningBlessing(controller);
         MapNode node = controller.getMapService().getAvailableNodes().getFirst();
         return node.id();
+    }
+
+    private static void completeOpeningBlessing(GameController controller) {
+        if (controller.getPhase() != GamePhase.BLESSING) {
+            return;
+        }
+        BlessingOption option = controller.getCurrentBlessingOptions().stream()
+                .filter(BlessingOption::available)
+                .filter(choice -> choice.id().equals(BlessingType.GOLD.id()))
+                .findFirst()
+                .or(() -> controller.getCurrentBlessingOptions().stream()
+                        .filter(choice -> choice.available() && !choice.requiresCard())
+                        .filter(choice -> !choice.id().equals(BlessingType.DAMAGE_GOLD.id()))
+                        .findFirst())
+                .or(() -> controller.getCurrentBlessingOptions().stream()
+                        .filter(choice -> choice.available() && !choice.requiresCard())
+                        .findFirst())
+                .orElseThrow();
+        BlessingActionResult result = controller.chooseBlessing(option.id());
+        assertTrue(result.succeeded(), result.message());
+        assertEquals(GamePhase.MAP, controller.getPhase());
     }
 
     private static void playWholeHand(Combat combat) {

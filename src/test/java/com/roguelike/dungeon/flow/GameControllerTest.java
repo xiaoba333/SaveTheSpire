@@ -2,9 +2,13 @@ package com.roguelike.dungeon.flow;
 
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
+import com.roguelike.dungeon.game.blessing.BlessingActionResult;
+import com.roguelike.dungeon.game.blessing.BlessingOption;
+import com.roguelike.dungeon.game.blessing.BlessingType;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
+import com.roguelike.dungeon.game.card.CardRarity;
 import com.roguelike.dungeon.game.campfire.CampfireActionStatus;
 import com.roguelike.dungeon.game.entity.BattleEndHealRelic;
 import com.roguelike.dungeon.game.entity.Player;
@@ -12,6 +16,8 @@ import com.roguelike.dungeon.game.event.EventActionStatus;
 import com.roguelike.dungeon.game.event.EventChoice;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
+import com.roguelike.dungeon.game.relic.RelicLibrary;
+import com.roguelike.dungeon.game.reward.BattleReward;
 import com.roguelike.dungeon.game.run.RunState;
 import com.roguelike.dungeon.game.shop.ShopActionResult;
 import com.roguelike.dungeon.game.shop.ShopItem;
@@ -33,6 +39,24 @@ class GameControllerTest {
             CardLibrary.SHRUG_IT_OFF);
 
     @Test
+    void openingBlessingShouldOfferThreeOptionsThenEnterMap() {
+        RunState runState = newRunState(1);
+        GameController controller = new GameController(runState, REWARD_POOL, line -> { });
+
+        assertEquals(GamePhase.BLESSING, controller.getPhase());
+        assertEquals(3, controller.getCurrentBlessingOptions().size());
+        assertEquals(3, controller.getCurrentBlessingOptions().stream()
+                .map(BlessingOption::id)
+                .distinct()
+                .count());
+
+        completeOpeningBlessing(controller);
+
+        assertEquals(GamePhase.MAP, controller.getPhase());
+        assertTrue(controller.getCurrentBlessingOptions().isEmpty());
+    }
+
+    @Test
     void selectingBattleShouldUseRunStateAndOpenRewardAfterRealVictory() {
         Player player = new Player(50, 3);
         List<CardInstance> deck = java.util.stream.IntStream.range(0, 10)
@@ -40,7 +64,7 @@ class GameControllerTest {
                         "quick-slash-" + index, CardLibrary.QUICK_SLASH))
                 .toList();
         RunState runState = new RunState(player, deck, 5, 12345L, 1);
-        GameController controller = new GameController(runState, REWARD_POOL, line -> { });
+        GameController controller = controllerOnMap(runState, REWARD_POOL);
         MapNode node = controller.getMapService().getAvailableNodes().getFirst();
 
         controller.selectNode(node.id());
@@ -61,10 +85,11 @@ class GameControllerTest {
         assertTrue(controller.getCurrentReward().isPresent());
         assertFalse(controller.getMapService().getCompletedNodeIds().contains(node.id()));
 
+        int goldBeforeSkip = runState.getGold();
         controller.skipRewardCard();
 
         assertEquals(GamePhase.MAP, controller.getPhase());
-        assertEquals(25, runState.getGold());
+        assertEquals(goldBeforeSkip + GameController.BATTLE_GOLD_REWARD, runState.getGold());
         assertTrue(controller.getCurrentReward().isEmpty());
         assertTrue(controller.getMapService().getCompletedNodeIds().contains(node.id()));
     }
@@ -72,7 +97,6 @@ class GameControllerTest {
     @Test
     void battleVictoryShouldHealFromBurningBloodRelic() {
         Player player = new Player(50, 3);
-        player.setHealth(20);
         player.addRelic(new BattleEndHealRelic());
         RunState runState = new RunState(
                 player,
@@ -80,7 +104,8 @@ class GameControllerTest {
                 0,
                 12345L,
                 1);
-        GameController controller = new GameController(runState, List.of(), line -> { });
+        GameController controller = controllerOnMap(runState, List.of());
+        player.setHealth(20);
         MapNode node = controller.getMapService().getAvailableNodes().getFirst();
 
         controller.selectNode(node.id());
@@ -95,10 +120,10 @@ class GameControllerTest {
     @Test
     void battleDefeatShouldEndRunWithoutCompletingNode() {
         Player player = new Player(50, 3);
-        player.setHealth(1);
         RunState runState = new RunState(
                 player, List.of(), 0, 12345L, 1);
-        GameController controller = new GameController(runState, REWARD_POOL, line -> { });
+        GameController controller = controllerOnMap(runState, REWARD_POOL);
+        player.setHealth(1);
         MapNode node = controller.getMapService().getAvailableNodes().getFirst();
         controller.selectNode(node.id());
 
@@ -118,8 +143,8 @@ class GameControllerTest {
 
     @Test
     void nonBattleLevelShouldReturnToMapAfterCompletion() {
-        GameController controller = new GameController(
-                newRunState(1), REWARD_POOL, line -> { });
+        GameController controller = controllerOnMap(
+                newRunState(1), REWARD_POOL);
 
         for (int step = 0; step < 10 && controller.getPhase() == GamePhase.MAP; step++) {
             MapNode node = controller.getMapService().getAvailableNodes().getFirst();
@@ -143,8 +168,8 @@ class GameControllerTest {
 
     @Test
     void eventChoiceShouldResolveEventAndCompleteMapNode() {
-        GameController controller = new GameController(
-                newRunState(1), REWARD_POOL, line -> { });
+        GameController controller = controllerOnMap(
+                newRunState(1), REWARD_POOL);
 
         int safetyCounter = 0;
         while (controller.getPhase() != GamePhase.EVENT && safetyCounter++ < 15) {
@@ -183,9 +208,9 @@ class GameControllerTest {
     @Test
     void campfireRestShouldHealAndCompleteMapNode() {
         RunState runState = newRunState(1);
+        GameController controller = controllerOnMap(
+                runState, REWARD_POOL);
         runState.getPlayer().setHealth(20);
-        GameController controller = new GameController(
-                runState, REWARD_POOL, line -> { });
 
         int safetyCounter = 0;
         while (controller.getPhase() != GamePhase.REST && safetyCounter++ < 15) {
@@ -209,10 +234,13 @@ class GameControllerTest {
         assertFalse(controller.getCurrentCampfireActions().isEmpty());
         assertFalse(controller.getCampfireUpgradeableCards().isEmpty());
 
+        int beforeRest = runState.getPlayer().getHealth();
+        int healAmount = Math.max(1, runState.getPlayer().getMaxHealth() * 30 / 100);
         assertEquals(CampfireActionStatus.SUCCESS,
                 controller.restAtCampfire().status());
 
-        assertEquals(35, runState.getPlayer().getHealth());
+        assertEquals(Math.min(runState.getPlayer().getMaxHealth(), beforeRest + healAmount),
+                runState.getPlayer().getHealth());
         assertEquals(GamePhase.MAP, controller.getPhase());
         assertTrue(controller.getCurrentCampfireActions().isEmpty());
         assertTrue(controller.getCampfireUpgradeableCards().isEmpty());
@@ -220,9 +248,85 @@ class GameControllerTest {
     }
 
     @Test
+    void bossVictoryShouldOfferTowerKeyRareCardsAndGoldThenAdvanceAct() {
+        Player player = new Player(50, 3);
+        RunState runState = new RunState(
+                player,
+                List.of(new CardInstance("strike-1", CardLibrary.STRIKE)),
+                0,
+                12345L,
+                2);
+        List<Card> pool = CardLibrary.rewardPoolFor(CardLibrary.bloodLordRewardCardIds());
+        GameController controller = controllerOnMap(runState, pool);
+
+        int safety = 0;
+        while (safety++ < 20) {
+            assertEquals(GamePhase.MAP, controller.getPhase());
+            MapNode node = controller.getMapService().getAvailableNodes().getFirst();
+            controller.selectNode(node.id());
+            if (controller.getPhase() == GamePhase.BATTLE) {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+                if (node.type() == MapNodeType.BOSS) {
+                    break;
+                }
+                controller.skipRewardCard();
+            } else {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+            }
+        }
+
+        assertEquals(GamePhase.REWARD, controller.getPhase());
+        BattleReward reward = controller.getCurrentReward().orElseThrow();
+        assertEquals(GameController.BOSS_GOLD_REWARD, reward.gold());
+        assertEquals(RelicLibrary.TOWER_KEY, reward.relic().id());
+        assertEquals("高塔之匙", reward.relic().name());
+        assertEquals("更深度探索的钥匙......", reward.relic().description());
+        assertFalse(reward.cardChoices().isEmpty());
+        assertTrue(reward.cardChoices().stream()
+                .allMatch(card -> card.rarity() == CardRarity.RARE));
+
+        int goldBefore = runState.getGold();
+        controller.skipRewardCard();
+
+        assertEquals(2, runState.getCurrentAct());
+        assertEquals(GamePhase.MAP, controller.getPhase());
+        assertEquals(goldBefore + GameController.BOSS_GOLD_REWARD, runState.getGold());
+        assertTrue(player.hasRelicById(RelicLibrary.TOWER_KEY));
+        assertTrue(controller.getMapService().getCompletedNodeIds().isEmpty());
+    }
+
+    @Test
+    void finalBossRewardShouldFinishRunAfterClaim() {
+        RunState runState = newRunState(1);
+        GameController controller = controllerOnMap(runState, List.of());
+
+        int safety = 0;
+        while (safety++ < 20) {
+            assertEquals(GamePhase.MAP, controller.getPhase());
+            MapNode node = controller.getMapService().getAvailableNodes().getFirst();
+            controller.selectNode(node.id());
+            if (controller.getPhase() == GamePhase.BATTLE) {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+                if (node.type() == MapNodeType.BOSS) {
+                    break;
+                }
+                controller.skipRewardCard();
+            } else {
+                controller.onLevelFinished(LevelResult.COMPLETED);
+            }
+        }
+
+        assertEquals(GamePhase.REWARD, controller.getPhase());
+        controller.skipRewardCard();
+        assertEquals(GamePhase.VICTORY, controller.getPhase());
+        assertFalse(runState.hasNextAct());
+        assertTrue(runState.getPlayer().hasRelicById(RelicLibrary.TOWER_KEY));
+    }
+
+    @Test
     void bossShouldAdvanceToNextActAndFinalBossShouldFinishRun() {
         RunState runState = newRunState(2);
-        GameController controller = new GameController(runState, List.of(), line -> { });
+        GameController controller = controllerOnMap(runState, List.of());
 
         int safetyCounter = 0;
         while (runState.getCurrentAct() == 1 && safetyCounter++ < 20) {
@@ -250,7 +354,7 @@ class GameControllerTest {
                 200,
                 12345L,
                 1);
-        GameController controller = new GameController(runState, REWARD_POOL, line -> { });
+        GameController controller = controllerOnMap(runState, REWARD_POOL);
 
         int safetyCounter = 0;
         while (controller.getPhase() != GamePhase.SHOP && safetyCounter++ < 10) {
@@ -293,6 +397,7 @@ class GameControllerTest {
     }
 
     private static void completeOneNode(GameController controller) {
+        completeOpeningBlessing(controller);
         assertEquals(GamePhase.MAP, controller.getPhase());
         MapNode node = controller.getMapService().getAvailableNodes().getFirst();
         controller.selectNode(node.id());
@@ -306,9 +411,36 @@ class GameControllerTest {
             }
             case EVENT, SHOP, REST -> controller.onLevelFinished(LevelResult.COMPLETED);
             default -> {
-                // Boss 可能直接把流程切到新章节或最终胜利。
+                // 领完 Boss 奖励后可能已经切到新章节或最终胜利。
             }
         }
+    }
+
+    private static GameController controllerOnMap(RunState runState, List<Card> pool) {
+        GameController controller = new GameController(runState, pool, line -> { });
+        completeOpeningBlessing(controller);
+        return controller;
+    }
+
+    private static void completeOpeningBlessing(GameController controller) {
+        if (controller.getPhase() != GamePhase.BLESSING) {
+            return;
+        }
+        BlessingOption option = controller.getCurrentBlessingOptions().stream()
+                .filter(BlessingOption::available)
+                .filter(choice -> choice.id().equals(BlessingType.GOLD.id()))
+                .findFirst()
+                .or(() -> controller.getCurrentBlessingOptions().stream()
+                        .filter(choice -> choice.available() && !choice.requiresCard())
+                        .filter(choice -> !choice.id().equals(BlessingType.DAMAGE_GOLD.id()))
+                        .findFirst())
+                .or(() -> controller.getCurrentBlessingOptions().stream()
+                        .filter(choice -> choice.available() && !choice.requiresCard())
+                        .findFirst())
+                .orElseThrow();
+        BlessingActionResult result = controller.chooseBlessing(option.id());
+        assertTrue(result.succeeded(), result.message());
+        assertEquals(GamePhase.MAP, controller.getPhase());
     }
 
     private static RunState newRunState(int totalActs) {

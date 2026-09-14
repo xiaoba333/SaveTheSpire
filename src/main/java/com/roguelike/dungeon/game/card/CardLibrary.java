@@ -75,7 +75,8 @@ public final class CardLibrary {
             context -> context.dealDamageToMonster(12),
             false,
             true,
-            true);
+            true,
+            CardRarity.RARE);
 
     public static final Card IRON_WAVE = new Card(
             "iron_wave",
@@ -89,7 +90,8 @@ public final class CardLibrary {
             },
             false,
             true,
-            true);
+            true,
+            CardRarity.RARE);
 
     public static final Card SHRUG_IT_OFF = new Card(
             "shrug_it_off",
@@ -103,7 +105,8 @@ public final class CardLibrary {
             },
             false,
             true,
-            true);
+            true,
+            CardRarity.RARE);
 
     public static final Card BLOODLETTING = new Card(
             "bloodletting",
@@ -472,7 +475,13 @@ public final class CardLibrary {
 
     /** 铁血战士专属奖励卡池（不含基础打击/防御，也不含公共无色牌）。 */
     public static List<Card> warriorRewardCards() {
-        return List.of(BASH, QUICK_SLASH, HEAVY_STRIKE, IRON_WAVE, SHRUG_IT_OFF);
+        return List.of(
+                BASH,
+                QUICK_SLASH,
+                HEAVY_STRIKE,
+                IRON_WAVE,
+                SHRUG_IT_OFF,
+                BLOOD_METALLICIZE);
     }
 
     public static List<String> warriorRewardCardIds() {
@@ -498,12 +507,23 @@ public final class CardLibrary {
                 CRIMSON_POOL,
                 BLOOD_STRIP,
                 VOMIT_BLOOD,
-                BLOOD_REBIRTH,
-                BLOOD_METALLICIZE);
+                BLOOD_REBIRTH);
     }
 
     public static List<String> bloodLordRewardCardIds() {
         return ids(bloodLordRewardCards());
+    }
+
+    /** 从卡池中筛出指定稀有度，保持原顺序。 */
+    public static List<Card> ofRarity(List<Card> cards, CardRarity rarity) {
+        Objects.requireNonNull(cards, "卡池不能为 null");
+        Objects.requireNonNull(rarity, "稀有度不能为 null");
+        return cards.stream()
+                .filter(card -> {
+                    Objects.requireNonNull(card, "卡池不能包含 null");
+                    return card.rarity() == rarity;
+                })
+                .toList();
     }
 
     /** 角色专属卡池再加上公共无色牌，供战斗奖励和商店使用。 */

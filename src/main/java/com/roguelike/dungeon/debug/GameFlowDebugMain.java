@@ -6,6 +6,9 @@ import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.flow.MenuController;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
+import com.roguelike.dungeon.game.blessing.BlessingActionResult;
+import com.roguelike.dungeon.game.blessing.BlessingOption;
+import com.roguelike.dungeon.game.blessing.BlessingService;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
@@ -37,7 +40,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * 它调用同一个 {@link GameController}。</p>
  */
 public final class GameFlowDebugMain {
-    private static final int DEFAULT_ACT_COUNT = 1;
+    private static final int DEFAULT_ACT_COUNT = 2;
 
     private final Scanner scanner;
     private final GameController controller;
@@ -116,6 +119,7 @@ public final class GameFlowDebugMain {
     private void run() {
         while (running) {
             switch (controller.getPhase()) {
+                case BLESSING -> handleBlessing();
                 case MAP -> handleMap();
                 case BATTLE -> handleBattle();
                 case REWARD -> handleReward();
@@ -132,6 +136,77 @@ public final class GameFlowDebugMain {
                     running = false;
                 }
             }
+        }
+    }
+
+    private void handleBlessing() {
+        while (running && controller.getPhase() == GamePhase.BLESSING) {
+            if (controller.isBlessingAwaitingCard()) {
+                chooseBlessingCard();
+                continue;
+            }
+            List<BlessingOption> options = controller.getCurrentBlessingOptions();
+            System.out.println("\n=== " + BlessingService.TITLE + " ===");
+            System.out.println(BlessingService.DESCRIPTION);
+            for (int i = 0; i < options.size(); i++) {
+                BlessingOption option = options.get(i);
+                System.out.println("  " + i + " - " + option.label()
+                        + " | " + option.description()
+                        + (option.available()
+                        ? ""
+                        : "（不可选：" + option.unavailableReason() + "）"));
+            }
+            String input = readLine("请输入馈赠编号：");
+            if (!running) {
+                return;
+            }
+            try {
+                int index = Integer.parseInt(input);
+                if (index < 0 || index >= options.size()) {
+                    System.out.println("馈赠编号超出范围。");
+                    continue;
+                }
+                BlessingActionResult result = controller.chooseBlessing(
+                        options.get(index).id());
+                System.out.println(result.message());
+            } catch (NumberFormatException exception) {
+                System.out.println("请输入整数馈赠编号。");
+            }
+        }
+    }
+
+    private void chooseBlessingCard() {
+        List<CardInstance> cards = controller.getBlessingTargetCards();
+        if (cards.isEmpty()) {
+            controller.cancelBlessingCardPick();
+            System.out.println("没有可选卡牌，已返回选项。");
+            return;
+        }
+        System.out.println("可选卡牌：");
+        for (int i = 0; i < cards.size(); i++) {
+            CardInstance card = cards.get(i);
+            System.out.println("  " + i + " - " + card.displayName()
+                    + " | " + card.displayDescription());
+        }
+        String input = readLine("请输入卡牌编号（或 back 返回）：");
+        if (!running) {
+            return;
+        }
+        if (input.equalsIgnoreCase("back")) {
+            controller.cancelBlessingCardPick();
+            return;
+        }
+        try {
+            int index = Integer.parseInt(input);
+            if (index < 0 || index >= cards.size()) {
+                System.out.println("卡牌编号超出范围。");
+                return;
+            }
+            BlessingActionResult result = controller.chooseBlessingCard(
+                    cards.get(index).id());
+            System.out.println(result.message());
+        } catch (NumberFormatException exception) {
+            System.out.println("请输入整数卡牌编号。");
         }
     }
 

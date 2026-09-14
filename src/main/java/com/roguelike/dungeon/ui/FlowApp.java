@@ -6,6 +6,9 @@ import com.roguelike.dungeon.flow.MenuController;
 import com.roguelike.dungeon.flow.MenuPhase;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
+import com.roguelike.dungeon.game.blessing.BlessingActionResult;
+import com.roguelike.dungeon.game.blessing.BlessingOption;
+import com.roguelike.dungeon.game.blessing.BlessingService;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
@@ -63,7 +66,7 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class FlowApp extends Application {
 
-    private static final int DEFAULT_ACT_COUNT = 1;
+    private static final int DEFAULT_ACT_COUNT = 2;
 
     private final MapTextRenderer mapRenderer = new MapTextRenderer();
     private final Label titleLabel = new Label("杀戮尖塔 · 简易流程");
@@ -258,6 +261,7 @@ public class FlowApp extends Application {
         }
         showFlowUi();
         switch (controller.getPhase()) {
+            case BLESSING -> renderBlessing();
             case MAP -> renderMap();
             case BATTLE -> {
             }
@@ -273,7 +277,7 @@ public class FlowApp extends Application {
     private void renderCharacterSelect() {
         titleLabel.setText("选择角色");
         statusLabel.setText("选一个角色开局。隐藏角色可在下方输入编号（例如 god）。");
-        hintLabel.setText("种子留空则随机；章节数量默认 1。");
+        hintLabel.setText("种子留空则随机；章节数量默认 2。");
         bodyArea.setText("可选角色：\n");
         for (CharacterDefinition character : menu.getAvailableCharacters()) {
             bodyArea.appendText(character.id() + " - " + character.name()
@@ -330,6 +334,65 @@ public class FlowApp extends Application {
         } catch (IllegalArgumentException | IllegalStateException exception) {
             log("无法开局：" + exception.getMessage());
         }
+    }
+
+    private void renderBlessing() {
+        titleLabel.setText(BlessingService.TITLE);
+        statusLabel.setText(runSummary(controller.getRunState()));
+        if (controller.isBlessingAwaitingCard()) {
+            hintLabel.setText("选择一张永久牌组中的卡。");
+            renderBlessingCardChoices();
+            return;
+        }
+        hintLabel.setText("从三个选项中选一个，然后进入地图。");
+        StringBuilder body = new StringBuilder(BlessingService.DESCRIPTION).append("\n\n");
+        for (BlessingOption option : controller.getCurrentBlessingOptions()) {
+            body.append("- ").append(option.label())
+                    .append(" | ").append(option.description());
+            if (!option.available()) {
+                body.append("（不可选：").append(option.unavailableReason()).append("）");
+            }
+            body.append('\n');
+            Button button = new Button(option.label());
+            button.setDisable(!option.available());
+            button.setTooltip(new Tooltip(option.available()
+                    ? option.description()
+                    : option.unavailableReason()));
+            button.setOnAction(event -> {
+                BlessingActionResult result = controller.chooseBlessing(option.id());
+                log(result.message());
+                render();
+            });
+            actionBox.getChildren().add(button);
+        }
+        bodyArea.setText(body.toString());
+    }
+
+    private void renderBlessingCardChoices() {
+        List<CardInstance> cards = controller.getBlessingTargetCards();
+        StringBuilder body = new StringBuilder("可选卡牌：\n");
+        if (cards.isEmpty()) {
+            body.append("  （没有可选卡牌）\n");
+        }
+        for (CardInstance card : cards) {
+            body.append("  ").append(card.displayName())
+                    .append(" | ").append(card.displayDescription()).append('\n');
+            Button button = new Button(card.displayName());
+            button.setTooltip(new Tooltip(card.displayDescription()));
+            button.setOnAction(event -> {
+                BlessingActionResult result = controller.chooseBlessingCard(card.id());
+                log(result.message());
+                render();
+            });
+            actionBox.getChildren().add(button);
+        }
+        Button cancel = new Button("返回选项");
+        cancel.setOnAction(event -> {
+            controller.cancelBlessingCardPick();
+            render();
+        });
+        actionBox.getChildren().add(cancel);
+        bodyArea.setText(body.toString());
     }
 
     private void renderMap() {

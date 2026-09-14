@@ -3,6 +3,7 @@ package com.roguelike.dungeon.game.map;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -76,6 +77,35 @@ class MapGeneratorTest {
         map.getStartingNodes().forEach(node -> visit(map, node, reachableNodeIds));
 
         assertEquals(map.getNodes().size(), reachableNodeIds.size());
+    }
+
+    @Test
+    void eachActShouldHaveExactlyThreeNonConsecutiveElites() {
+        for (long seed = 0; seed < 50; seed++) {
+            DungeonMap map = new MapGenerator().generate(seed);
+            List<MapNode> elites = map.getNodes().stream()
+                    .filter(node -> node.type() == MapNodeType.ELITE)
+                    .toList();
+
+            assertEquals(MapGenerator.ELITE_COUNT, elites.size(), "种子 " + seed);
+            assertTrue(elites.stream().noneMatch(node -> node.floor() == 0),
+                    "第一层不能出现精英");
+            assertTrue(elites.stream().noneMatch(node ->
+                            node.floor() == MapGenerator.FLOOR_COUNT - 2
+                                    || node.floor() == MapGenerator.FLOOR_COUNT - 1),
+                    "休息层和 Boss 层不能出现精英");
+
+            Set<Integer> eliteFloors = new HashSet<>();
+            for (MapNode elite : elites) {
+                assertTrue(eliteFloors.add(elite.floor()),
+                        "同一层不能放两个精英：" + elite.floor());
+            }
+            List<Integer> floors = eliteFloors.stream().sorted().toList();
+            for (int i = 1; i < floors.size(); i++) {
+                assertTrue(floors.get(i) - floors.get(i - 1) >= 2,
+                        "精英不能连续：种子 " + seed + " 层 " + floors);
+            }
+        }
     }
 
     private static void visit(

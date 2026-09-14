@@ -152,6 +152,22 @@ class RelicServiceTest {
     }
 
     @Test
+    void towerKeyShouldBeAcquirableWithNoCombatEffect() {
+        Player player = new Player(50, 3);
+        int health = player.getHealth();
+        RelicService service = new RelicService(player, line -> { });
+        Relic key = RelicLibrary.create(RelicLibrary.TOWER_KEY);
+
+        assertTrue(service.acquire(key));
+        assertEquals("高塔之匙", key.name());
+        assertEquals("更深度探索的钥匙......", key.description());
+        assertEquals(RelicRarity.BOSS, key.rarity());
+        assertTrue(key.triggers().isEmpty());
+        assertEquals(health, player.getHealth());
+        assertEquals(3, player.getMaxEnergy());
+    }
+
+    @Test
     void startingRelicsShouldAllBeAcquirable() {
         List<Relic> starting = RelicLibrary.createStarting();
         assertFalse(starting.isEmpty());
