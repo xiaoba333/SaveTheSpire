@@ -46,8 +46,9 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/v1/battles` | 开始一场新战斗 |
-| `POST` | `/api/v1/battles/{battleId}/play` | 打出手牌中某张牌（按 cardId） |
+| `POST` | `/api/v1/battles` | 开始一场新战斗（可选指定 `encounterId` 编队） |
+| `POST` | `/api/v1/battles/{battleId}/target` | **切换攻击目标**（多敌人战斗用） |
+| `POST` | `/api/v1/battles/{battleId}/play` | 打出手牌中某张牌（按 cardId，可选带目标） |
 | `POST` | `/api/v1/battles/{battleId}/end-turn` | 玩家结束回合（后端同步执行怪物行动） |
 | `GET`  | `/api/v1/battles/{battleId}` | 查询当前战斗状态（重连 / 刷新用） |
 
@@ -79,7 +80,7 @@
 | `turnNumber` | int | 当前第几回合（从 1 开始） |
 | `phase` | string | `PLAYER_TURN` / `VICTORY` / `DEFEAT` |
 | `player` | UnitState | 玩家状态 |
-| `enemies` | UnitState[] | 敌人数组。后端当前单怪物，HTTP 层包成**单元素数组** |
+| `enemies` | UnitState[] | 敌人数组。**支持多敌人编队**（两条蛆、探险者二人组等），单怪战斗为单元素数组。`index` 即切换目标用的下标 |
 | `hand` | CardInstance[] | 当前手牌，按显示顺序 |
 | `piles` | object | 各牌堆数量：`draw`/`discard`/`exhaust` |
 | `result` | string? | `"VICTORY"` / `"DEFEAT"` / `null` |
@@ -91,12 +92,30 @@
 { "hp": 50, "maxHp": 50, "armor": 5, "energy": 3, "maxEnergy": 3, "intent": null }
 ```
 
+敌人额外带多敌人相关字段：
+
+```json
+{
+  "index": 1, "id": "explorer_female", "name": "探险者女",
+  "hp": 20, "maxHp": 20, "armor": 10,
+  "strength": 0, "alive": true, "targeted": false,
+  "intent": { "type": "ATTACK", "value": 0 },
+  "buffs": [ { "..." } ]
+}
+```
+
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `hp` / `maxHp` | int | 当前 / 上限生命 |
 | `armor` | int | 当前护甲 |
-| `energy` / `maxEnergy` | int? | 仅玩家有，敌人返回 `null` |
+| `energy` / `maxEnergy` | int? | 仅玩家有，敌人返回 `0` |
 | `intent` | Intent? | 仅敌人有，玩家返回 `null` |
+| `index` | int? | **仅敌人**。敌人下标，传给 `/target` 或 `play` 的 `targetIndex` |
+| `id` | string? | **仅敌人**。怪物定义 id，用于取立绘；也可作为 `targetId` |
+| `name` | string? | **仅敌人**。显示名，同名敌人靠 `index` 区分 |
+| `strength` | int? | **仅敌人**。当前力量（含状态加成） |
+| `alive` | bool? | **仅敌人**。是否存活；死亡的敌人不能再被选为目标 |
+| `targeted` | bool? | **仅敌人**。是否为玩家当前锁定的攻击目标，前端据此高亮 |
 
 ### 3.3 CardInstance（手牌中的一张牌实例）
 
@@ -153,6 +172,14 @@ POST /api/v1/battles
 响应 200：BattleState（turnNumber=1，phase=PLAYER_TURN，hand 含 5 张牌，每张带实例 id）
 ```
 
+联调多敌人时可指定编队，直接开出双怪战斗：
+
+```json
+{ "encounterId": "act1_grubs" }
+```
+
+可用编队：`act1_grubs`（两条蛆）、`act1_explorers`（探险者二人组）。
+
 ### 4.2 出牌
 
 ```
@@ -160,7 +187,7 @@ POST /api/v1/battles/{battleId}/play
 请求体：
 { "cardId": "3f2c-9a1b-0001" }
 响应 200：BattleState（出牌后的最新状态）
-响应 400：错误对象（能量不足 / 非玩家回合 / 卡牌不存在 / 不可打出 / 战斗已结束）
+响应 400：错误对象（能量不足 / 非玩家回合 / 卡牌不存在 / 不可打出 / 战斗已结束 / 目标无效）
 ```
 
 锻造牌出牌时，额外传入要升级的目标手牌实例 id：
@@ -171,7 +198,27 @@ POST /api/v1/battles/{battleId}/play
 
 `targetCardId` 仅锻造牌使用；普通牌可以省略。
 
-### 4.3 结束回合
+**多敌人**：可选带 `targetIndex` 或 `targetId`，表示「先把目标切到它，再打出这张牌」
+（前端把牌直接拖到某只敌人身上就是这个语义）。单目标卡牌打向锁定目标；
+`血雨`、`暮色帷幕` 这类群体卡无视目标，命中全部存活怪。
+
+```json
+{ "cardId": "strike-instance-id", "targetIndex": 1 }
+{ "cardId": "strike-instance-id", "targetId": "explorer_female" }
+```
+
+### 4.3 切换攻击目标
+
+```
+POST /api/v1/battles/{battleId}/target
+请求体：{ "index": 1 }                      或   { "monsterId": "explorer_female" }
+响应 200：BattleState（enemies[].targeted 已更新）
+响应 400：INVALID_TARGET（目标不存在或已阵亡）
+```
+
+目标阵亡后后端会**自动**把锁定目标切到第一只存活怪，前端不需要自己处理。
+
+### 4.4 结束回合
 
 ```
 POST /api/v1/battles/{battleId}/end-turn
@@ -179,7 +226,7 @@ POST /api/v1/battles/{battleId}/end-turn
 响应 200：BattleState（后端同步执行怪物行动后返回）
 ```
 
-### 4.4 查询状态
+### 4.5 查询状态
 
 ```
 GET /api/v1/battles/{battleId}
@@ -248,7 +295,7 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 1. **端口与部署**：默认 `http://localhost:8080`，**可配置**，客户端不写死；路径前缀 `/api/v1`。
 2. **出牌标识**：**`cardId`**（实例唯一 id）。后端需在手牌层分配实例 id（建议 UUID），与 `definitionId` 分离。
 3. **字段命名**：camelCase（小驼峰），Jackson 默认。
-4. **敌人结构**：`enemies` 数组（当前 1 个，后端 HTTP 层包成单元素数组）。
+4. **敌人结构**：`enemies` 数组，**已支持多敌人编队**（普通节点会抽到两条蛆、探险者二人组；精英与 Boss 仍为单怪）。单怪战斗仍是单元素数组，前端无需分支。切换目标用 `POST /{battleId}/target` 或在 `play` 里带 `targetIndex` / `targetId`。
 5. **日志**：`newLogs` 增量。后端需加**日志缓冲区**，每次操作后返回新增日志并清空；单次最多 50 条。
 6. **账号/多人**：MVP 无登录；后端生成 `battleId`，Unity 存内存或 PlayerPrefs；当前一台机器一个战斗实例。
 7. **战斗过期**：MVP 只存后端内存，重启失效；开发期设置 **30 分钟无操作清理**。
@@ -380,6 +427,7 @@ POST /api/v1/battles/550e8400.../play  { "cardId": "3f2c-9a1b-0001" }
 | `INVALID_CHARACTER` | characterId 缺失或不存在 |
 | `INVALID_ACT_COUNT` | actCount 小于等于 0 |
 | `NO_ACTIVE_BATTLE` | 未通过地图进入战斗就调用了 `POST /battles` |
+| `INVALID_TARGET` | 切换目标失败：`index` / `monsterId` 缺失、目标下标越界、或该敌人已阵亡 |
 | `INVALID_NODE` | nodeId 非法 / 节点被锁 / 当前阶段不能进入 |
 | `INVALID_CARD` | 奖励选卡时 cardId 不在候选中；或 `shop/remove` 缺 cardId |
 | `INVALID_ITEM` | `shop/buy` 缺 itemId，或当前不在商店阶段 |
