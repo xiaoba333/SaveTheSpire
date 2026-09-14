@@ -173,6 +173,9 @@ public final class GameStateJson {
     /**
      * 真实商店快照：金币、未售出的卡牌商品、可删卡列表、删卡状态与价格。
      * availableItems 来自 ShopService.getAvailableItems()（只含未售出），故 sold 恒 false。
+     *
+     * <p>每个商品内嵌一份 {@code card}（与奖励候选卡同构），前端据此渲染卡面；
+     * 只买卡时前端的兜底文字块就是用 name/description/rarity 这三个平铺字段。</p>
      */
     public static String shopJson(
             int gold,
@@ -187,13 +190,15 @@ public final class GameStateJson {
                 sb.append(',');
             }
             com.roguelike.dungeon.game.shop.ShopItem item = availableItems.get(i);
+            String rarity = item.card().rarity().name();
             sb.append("{\"id\":").append(Json.str(item.id()))
               .append(",\"name\":").append(Json.str(item.card().name()))
               .append(",\"kind\":\"CARD\"")
               .append(",\"price\":").append(item.price())
               .append(",\"description\":").append(Json.str(item.card().description()))
-              .append(",\"rarity\":\"COMMON\"")
+              .append(",\"rarity\":").append(Json.str(rarity))
               .append(",\"sold\":false")
+              .append(",\"card\":").append(cardDefJson(item.card(), rarity))
               .append('}');
         }
         sb.append("],\"removableCards\":[");
