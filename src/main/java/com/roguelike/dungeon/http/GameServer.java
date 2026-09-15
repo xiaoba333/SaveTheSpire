@@ -577,7 +577,7 @@ public final class GameServer {
             return;
         }
         if (result.succeeded()) {
-            sendJson(ex, 200, mapStateJson());
+            sendJson(ex, 200, GameStateJson.eventChoiceResultJson(result));
         } else {
             sendError(ex, 400, result.status().name(), result.message());
         }

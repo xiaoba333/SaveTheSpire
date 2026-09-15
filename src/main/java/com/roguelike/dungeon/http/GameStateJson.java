@@ -8,6 +8,7 @@ import com.roguelike.dungeon.game.character.CharacterDefinition;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.entity.Relic;
 import com.roguelike.dungeon.game.event.EventChoice;
+import com.roguelike.dungeon.game.event.EventChoiceResult;
 import com.roguelike.dungeon.game.event.GameEvent;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeState;
@@ -354,10 +355,19 @@ public final class GameStateJson {
               .append(",\"label\":").append(Json.str(choice.label()))
               .append(",\"description\":").append(Json.str(choice.description()))
               .append(",\"disabled\":").append(!choice.available())
+              .append(",\"unavailableReason\":").append(Json.str(choice.unavailableReason()))
               .append('}');
         }
         sb.append("]}");
         return sb.toString();
+    }
+
+    /** 事件选项结算成功后的结果（success/status/message），供前端展示结果页。 */
+    public static String eventChoiceResultJson(EventChoiceResult result) {
+        return "{\"success\":" + result.succeeded()
+                + ",\"status\":" + Json.str(result.status().name())
+                + ",\"message\":" + Json.str(result.message())
+                + "}";
     }
 
     // ---------- 卡牌序列化助手 ----------
