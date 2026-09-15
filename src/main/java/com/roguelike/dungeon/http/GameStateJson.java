@@ -98,7 +98,16 @@ public final class GameStateJson {
 
     // ---------- 地图 ----------
 
-    public static String mapJson(MapService mapService) {
+    /**
+     * 地图 JSON。除节点与当前节点外，还带上<b>第几章</b>（act）—— 前端要在地图左上角显示「第一层 / 第二层」。
+     *
+     * <p>这个值前端自己推不出来：每章的地图是进入该章时<b>重新生成</b>的（{@code RunState.advanceAct}
+     * 会 new 一个 MapService），所以第二章的地图里没有任何「历史节点」可以反推当前是第几章。</p>
+     *
+     * @param mapService 当前章的地图
+     * @param act        当前章号（从 1 开始）
+     */
+    public static String mapJson(MapService mapService, int act) {
         List<MapNode> nodes = mapService.getNodes();
         StringBuilder sb = new StringBuilder(nodes.size() * 160 + 16);
         sb.append("{\"nodes\":[");
@@ -108,7 +117,8 @@ public final class GameStateJson {
             }
             sb.append(nodeJson(mapService, nodes.get(i)));
         }
-        sb.append("],\"currentNodeId\":");
+        sb.append("],\"act\":").append(act);
+        sb.append(",\"currentNodeId\":");
         sb.append(mapService.getCurrentNode()
                 .map(node -> Json.str(String.valueOf(node.id())))
                 .orElse("null"));

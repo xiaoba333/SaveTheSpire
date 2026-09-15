@@ -760,7 +760,10 @@ public final class GameServer {
     // ============ 状态助手 ============
 
     private String mapStateJson() {
-        return GameStateJson.mapJson(controller.getMapService());
+        // 带上当前章号：前端要在地图左上角显示「第一层 / 第二层」。
+        // 调用点都先过了 requireController，而 controller 与 runState 在 handleStart 里是一起赋的，
+        // 所以这里 runState 必定非空（真为空也该让它抛出来，别用默认值把 bug 盖掉）。
+        return GameStateJson.mapJson(controller.getMapService(), runState.getCurrentAct());
     }
 
     // ============ 错误信息 ============
