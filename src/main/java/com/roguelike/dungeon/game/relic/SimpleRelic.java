@@ -1,5 +1,6 @@
 package com.roguelike.dungeon.game.relic;
 
+import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.entity.Relic;
 import com.roguelike.dungeon.game.entity.RelicContext;
 import com.roguelike.dungeon.game.entity.RelicRarity;
@@ -16,6 +17,9 @@ import java.util.Set;
  *
  * <p>带有累计计数（苦无的攻击数）或跨回合暂存（钙化壳的护甲）的遗物，
  * 不能使用本类——单例会导致状态在多次开局之间串味，请写成独立类。</p>
+ *
+ * <p><b>费用修正</b>是可选的：只有需要改牌费的遗物（「铁律」「双刃」）才传
+ * {@link CostModifier}，其余走六参构造即可，不必重写 {@link Relic#modifyCost}。</p>
  */
 public final class SimpleRelic implements Relic {
 
@@ -25,12 +29,26 @@ public final class SimpleRelic implements Relic {
         void onTrigger(RelicTrigger trigger, RelicContext ctx);
     }
 
+    /**
+     * 费用修正逻辑。
+     *
+     * <p>与 {@link Handler} 分开是因为调用时机完全不同：{@code modifyCost} 在
+     * <b>打牌之前</b>被逐张询问，且拿不到 {@link RelicContext}（那时还没有战斗事件上下文），
+     * 所以这里只能看到牌本身与当前费用。</p>
+     */
+    @FunctionalInterface
+    public interface CostModifier {
+        /** @return 修正后的费用；下限由 {@link RelicService#modifyCost} 统一压到 0 */
+        int modify(CardInstance instance, int currentCost);
+    }
+
     private final String id;
     private final String name;
     private final String description;
     private final RelicRarity rarity;
     private final Set<RelicTrigger> triggers;
     private final Handler handler;
+    private final CostModifier costModifier;
 
     public SimpleRelic(
             String id,
@@ -39,6 +57,22 @@ public final class SimpleRelic implements Relic {
             RelicRarity rarity,
             Set<RelicTrigger> triggers,
             Handler handler) {
+        this(id, name, description, rarity, triggers, handler, null);
+    }
+
+    /**
+     * 带费用修正的完整构造。
+     *
+     * @param costModifier 费用修正逻辑；传 null 表示不修正费用
+     */
+    public SimpleRelic(
+            String id,
+            String name,
+            String description,
+            RelicRarity rarity,
+            Set<RelicTrigger> triggers,
+            Handler handler,
+            CostModifier costModifier) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("遗物编号不能为空");
         }
@@ -48,6 +82,7 @@ public final class SimpleRelic implements Relic {
         this.rarity = Objects.requireNonNull(rarity, "遗物稀有度不能为 null");
         this.triggers = Set.copyOf(Objects.requireNonNull(triggers, "触发点集合不能为 null"));
         this.handler = Objects.requireNonNull(handler, "遗物处理逻辑不能为 null");
+        this.costModifier = costModifier;
     }
 
     @Override
@@ -78,6 +113,13 @@ public final class SimpleRelic implements Relic {
     @Override
     public void onTrigger(RelicTrigger trigger, RelicContext ctx) {
         handler.onTrigger(trigger, ctx);
+    }
+
+    @Override
+    public int modifyCost(CardInstance instance, int currentCost) {
+        return costModifier == null
+                ? currentCost
+                : costModifier.modify(instance, currentCost);
     }
 
     @Override

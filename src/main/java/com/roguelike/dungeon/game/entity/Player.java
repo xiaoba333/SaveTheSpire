@@ -135,6 +135,23 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         energy = Math.min(energy + amount, maxEnergy);
     }
 
+    /**
+     * 降低每回合能量上限（永久，直到本局结束）。
+     *
+     * <p>与 {@link #addMaxEnergy(int)} 相对，专供「以能量换收益」的 Boss 遗物使用
+     * （例如「苦修誓约」）。<b>当前能量会同步收敛到新上限</b>，否则会出现
+     * 「当前能量 3 / 上限 2」这种非法状态，后续 {@code refresh()} 反而会把能量补回去。</p>
+     *
+     * @param amount 降低量，amount &lt;= 0 时忽略；上限最低压到 0
+     */
+    public void reduceMaxEnergy(int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        maxEnergy = Math.max(0, maxEnergy - amount);
+        energy = Math.min(energy, maxEnergy);
+    }
+
     @Override
     public void setEnergy(int energy) {
         this.energy = clamp(energy, 0, maxEnergy);

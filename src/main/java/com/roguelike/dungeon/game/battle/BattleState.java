@@ -528,6 +528,31 @@ public final class BattleState implements BattleInfo {
     }
 
     /**
+     * 给场上<b>全体存活怪物</b>叠加状态层数。
+     *
+     * <p>开战布局类效果（「麻醉剂」的虚弱、Boss 遗物「毒心」的中毒）用这条路径，
+     * 否则多怪编队下只有被锁定的那一只会中招，「削弱这伙敌人」的语义就丢了。
+     * 战斗过程中累积类效果仍走单目标版本，尊重玩家的集火选择。</p>
+     *
+     * <p>木桩模式（名册为空）下退化为给唯一那只怪叠加，与单目标版本完全等价。</p>
+     */
+    @Override
+    public void addAllMonsterStacks(StatusEffect effect, int amount) {
+        if (effect == null || amount == 0) {
+            return;
+        }
+        if (!hasRoster()) {
+            addMonsterStacks(effect, amount);
+            return;
+        }
+        for (Monster monster : monsters) {
+            if (!monster.isDead()) {
+                addMonsterStacks(monster, effect, amount);
+            }
+        }
+    }
+
+    /**
      * 给指定怪物叠加状态层数。
      *
      * @param monster 目标怪物；传 null 表示走木桩模式的状态表

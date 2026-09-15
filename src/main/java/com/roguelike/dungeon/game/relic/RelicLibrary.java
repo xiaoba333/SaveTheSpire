@@ -92,12 +92,35 @@ public final class RelicLibrary {
     // ---------- 扩充：Boss ----------
 
     public static final String DARK_PACT = "dark_pact";
-    public static final String TOWER_KEY = "tower_key";
     public static final String CRIMSON_CROWN = "crimson_crown";
     public static final String LEVIATHAN_HEART = "leviathan_heart";
     public static final String AEGIS_OF_RUIN = "aegis_of_ruin";
     public static final String SOULBOUND_LEDGER = "soulbound_ledger";
     public static final String DOOMSDAY_CLOCK = "doomsday_clock";
+
+    /**
+     * 高塔之匙：剧情道具，<b>不参与</b> Boss 三选一随机池。
+     *
+     * <p>由流程层定点发放（Boss 常规奖励结算后额外给，见 {@code GameController}），
+     * 本身没有任何战斗效果 —— 放进随机池只会给玩家一个「死选项」，
+     * 所以它在 {@link #BOSS_POOL_EXCLUDED} 里被显式排除。</p>
+     */
+    public static final String TOWER_KEY = "tower_key";
+
+    // ---------- 扩充：Boss（第二批，池子补齐到 12 件） ----------
+
+    /** 铁律：重构费用结构，技能牌变便宜、攻击牌变贵。 */
+    public static final String IRON_EDICT = "iron_edict";
+    /** 双刃：全部减费，代价是承伤上升。 */
+    public static final String TWIN_CURSE = "twin_curse";
+    /** 猎首徽记：击杀滚力量，代价是每战开场定额掉血。 */
+    public static final String PREDATORS_CREST = "predators_crest";
+    /** 毒心：开战让全体中毒，代价是自己的直伤变低。 */
+    public static final String VENOM_HEART = "venom_heart";
+    /** 苦修誓约：以能量上限换高额直伤与稳定护甲。 */
+    public static final String ASCETIC_VOW = "ascetic_vow";
+    /** 嗜血纹章：开战同时获得力量与易伤。 */
+    public static final String BLOODLUST_SIGIL = "bloodlust_sigil";
 
     /**
      * 每局固定获得的初始遗物。
@@ -110,6 +133,15 @@ public final class RelicLibrary {
             List.of(ANCHOR, HEARTSTONE, BANDAGE, BLOOD_PRICE);
 
     private static final Map<String, Supplier<Relic>> FACTORIES = new LinkedHashMap<>();
+
+    /**
+     * BOSS 稀有度里<b>不进随机三选一</b>的遗物。
+     *
+     * <p>用「稀有度」和「是否可随机获得」两个维度分开表达：像「高塔之匙」这种
+     * 剧情 / 钥匙类道具，稀有度必须是 BOSS 才不会掉进普通与精英的掉落池，
+     * 但它没有任何战斗效果，由流程层定点发放，因此不能出现在三选一里。</p>
+     */
+    private static final Set<String> BOSS_POOL_EXCLUDED = Set.of(TOWER_KEY);
 
     static {
         // ==================== 初始遗物 ====================
@@ -157,14 +189,16 @@ public final class RelicLibrary {
                 (trigger, ctx) -> ctx.addValue(1)));
 
         register(NUMBING_AGENT, () -> new SimpleRelic(NUMBING_AGENT, "麻醉剂",
-                "战斗开始时给怪物 2 层虚弱。", RelicRarity.COMMON,
+                "战斗开始时给全体怪物 2 层虚弱。", RelicRarity.COMMON,
                 Set.of(RelicTrigger.BATTLE_START),
                 (trigger, ctx) -> {
                     if (ctx.battle() == null) {
                         return;
                     }
-                    ctx.battle().addMonsterStacks(StatusEffect.WEAK, 2);
-                    ctx.log("「麻醉剂」触发：怪物获得 2 层虚弱。");
+                    // 开战布局类效果作用于全体：多怪编队下只麻痹一只，
+                    // 「削弱这伙敌人」的语义就不成立了。
+                    ctx.battle().addAllMonsterStacks(StatusEffect.WEAK, 2);
+                    ctx.log("「麻醉剂」触发：全体怪物获得 2 层虚弱。");
                 }));
 
         register(THORN_ARMOR, () -> new SimpleRelic(THORN_ARMOR, "荆棘之甲",
@@ -377,13 +411,17 @@ public final class RelicLibrary {
                 Set.of(RelicTrigger.DAMAGE_DEALT, RelicTrigger.DAMAGE_TAKEN),
                 (trigger, ctx) -> ctx.multiplyValue(1.5)));
 
+        // 代价从「最大生命 -8」加重到 -15：+1 能量是全游戏最强的单条收益，
+        // 稀有档给到「-8」会严格优于 Boss 档的「黑暗契约（-12）」，稀有度曲线是反的。
+        // 这里只调到刚好低于 Boss 档，不做更重的惩罚 —— 再重（如 -20）会让它变成
+        // 没人敢拿的死选项，等于把「死内容」从一个位置挪到另一个位置。
         register(GREEDY_CUP, () -> new SimpleRelic(GREEDY_CUP, "贪婪之杯",
-                "获得时：能量上限 +1，最大生命 -8。", RelicRarity.RARE,
+                "获得时：能量上限 +1，最大生命 -15。", RelicRarity.RARE,
                 Set.of(RelicTrigger.OBTAIN),
                 (trigger, ctx) -> {
-                    ctx.player().reduceMaxHealth(8);
+                    ctx.player().reduceMaxHealth(15);
                     ctx.player().addMaxEnergy(1);
-                    ctx.log("「贪婪之杯」触发：能量上限 +1，最大生命 -8。");
+                    ctx.log("「贪婪之杯」触发：能量上限 +1，最大生命 -15。");
                 }));
 
         register(JUGGERNAUT, () -> new SimpleRelic(JUGGERNAUT, "势不可挡",
@@ -424,6 +462,9 @@ public final class RelicLibrary {
                     ctx.log("「黑暗契约」触发：能量上限 +1，最大生命 -12。");
                 }));
 
+        // 高塔之匙：剧情道具，定点发放，不进随机池。
+        // 稀有度保持 BOSS 是为了不在普通 / 精英掉落里出现；能不能被抽到则交给
+        // BOSS_POOL_EXCLUDED 决定 —— 两者是分开的两件事。
         register(TOWER_KEY, () -> new SimpleRelic(TOWER_KEY, "高塔之匙",
                 "更深度探索的钥匙......", RelicRarity.BOSS,
                 Set.of(),
@@ -431,12 +472,15 @@ public final class RelicLibrary {
                     // 占位遗物：目前没有战斗效果。
                 }));
 
+        // 从 +35% 上修到 +50%：Boss 档不能弱于同类的稀有「玻璃大炮」（+50%/+50%）。
+        // 代价落在「每场战斗开始时失去 20% 当前生命」，是每战重来的一次性代价，
+        // 与玻璃大炮「永久提高承伤」不同 —— 短战越猛，长线越危险。
         register(CRIMSON_CROWN, () -> new SimpleRelic(CRIMSON_CROWN, "猩红王冠",
-                "你造成的伤害 +35%；每场战斗开始时失去 20% 当前生命。", RelicRarity.BOSS,
+                "你造成的伤害 +50%；每场战斗开始时失去 20% 当前生命。", RelicRarity.BOSS,
                 Set.of(RelicTrigger.DAMAGE_DEALT, RelicTrigger.BATTLE_START),
                 (trigger, ctx) -> {
                     if (trigger == RelicTrigger.DAMAGE_DEALT) {
-                        ctx.multiplyValue(1.35);
+                        ctx.multiplyValue(1.5);
                         return;
                     }
                     int before = ctx.player().getHealth();
@@ -447,14 +491,16 @@ public final class RelicLibrary {
                     }
                 }));
 
+        // 从 +30 上修到 +40：50 血玩家 +30 只有 60% 增幅，再扣掉每回合 -2 的持续侵蚀，
+        // 净收益不足以支撑一件「Boss」档。+40 让「血上限极高但被 DoT 磨」的定位立得住。
         register(LEVIATHAN_HEART, () -> new SimpleRelic(LEVIATHAN_HEART, "利维坦之心",
-                "获得时：最大生命 +30 并回满生命；每回合结束时失去 2 点生命。", RelicRarity.BOSS,
+                "获得时：最大生命 +40 并回满生命；每回合结束时失去 2 点生命。", RelicRarity.BOSS,
                 Set.of(RelicTrigger.OBTAIN, RelicTrigger.TURN_END),
                 (trigger, ctx) -> {
                     if (trigger == RelicTrigger.OBTAIN) {
-                        ctx.player().increaseMaxHealth(30);
+                        ctx.player().increaseMaxHealth(40);
                         ctx.player().healToFull();
-                        ctx.log("「利维坦之心」触发：最大生命 +30 并回满生命。");
+                        ctx.log("「利维坦之心」触发：最大生命 +40 并回满生命。");
                         return;
                     }
                     int before = ctx.player().getHealth();
@@ -477,8 +523,10 @@ public final class RelicLibrary {
                     ctx.multiplyValue(0.8);
                 }));
 
+        // 胜利收益从 +5 上修到 +8（净 +6/战）：原来的净 +3/战 打不过稀有的「收割灵魂」
+        // （击杀最大生命 +3，且没有任何代价）。Boss 档必须反超稀有档。
         register(SOULBOUND_LEDGER, () -> new SimpleRelic(SOULBOUND_LEDGER, "缚魂账簿",
-                "每场战斗胜利后最大生命 +5；每场战斗开始时最大生命 -2。", RelicRarity.BOSS,
+                "每场战斗胜利后最大生命 +8；每场战斗开始时最大生命 -2。", RelicRarity.BOSS,
                 Set.of(RelicTrigger.BATTLE_START, RelicTrigger.BATTLE_END),
                 (trigger, ctx) -> {
                     if (trigger == RelicTrigger.BATTLE_START) {
@@ -486,23 +534,125 @@ public final class RelicLibrary {
                         ctx.log("「缚魂账簿」代价：最大生命 -2。");
                         return;
                     }
-                    ctx.player().increaseMaxHealth(5);
-                    ctx.log("「缚魂账簿」触发：最大生命 +5。");
+                    ctx.player().increaseMaxHealth(8);
+                    ctx.log("「缚魂账簿」触发：最大生命 +8。");
                 }));
 
+        // 原来 ×2 / ×0.6 的期望倍率 = (2 + 0.6 + 0.6) / 3 ≈ 1.067，也就是平均只 +6.7%，
+        // 配不上 Boss 档（对比：稀有「玻璃大炮」是稳定 +50%）。
+        // 调成 ×2.5 / ×0.85 后期望 = (2.5 + 0.85 + 0.85) / 3 ≈ 1.40，峰值更锋利，
+        // 「把输出压缩到特定回合」的节奏感也更强。
         register(DOOMSDAY_CLOCK, () -> new SimpleRelic(DOOMSDAY_CLOCK, "末日之钟",
-                "每第 3 个回合，你造成的伤害 ×2；其余回合 ×0.6。", RelicRarity.BOSS,
+                "每第 3 个回合，你造成的伤害 ×2.5；其余回合 ×0.85。", RelicRarity.BOSS,
                 Set.of(RelicTrigger.DAMAGE_DEALT),
                 (trigger, ctx) -> {
                     if (ctx.battle() == null) {
                         return;
                     }
                     if (ctx.battle().turnNumber() % 3 == 0) {
-                        ctx.multiplyValue(2.0);
-                        ctx.log("「末日之钟」触发：本回合伤害翻倍。");
+                        ctx.multiplyValue(2.5);
+                        ctx.log("「末日之钟」触发：本回合伤害 ×2.5。");
                     } else {
-                        ctx.multiplyValue(0.6);
+                        ctx.multiplyValue(0.85);
                     }
+                }));
+
+        // ==================== Boss：第二批（池子补齐到 12 件） ====================
+        //
+        // 这 6 件在「代价货币」上与第一批刻意错开：
+        // 费用结构 / 承伤 / 开场定额生命 / 毒流 / 能量 / 状态。
+        // 目的是让三选一里任意两件都是「打法不同」，而不是「谁数值高」。
+
+        // 用「费用重构」表达构筑取向：技能牌变便宜、攻击牌变贵。
+        // 不新增触发点、不带状态 —— modifyCost 拿不到 RelicContext，但也正好不需要：
+        // 判断只看牌本身，是纯粹的费用函数。无触发点意味着不占用触发点索引。
+        register(IRON_EDICT, () -> new SimpleRelic(IRON_EDICT, "铁律",
+                "你打出的技能牌费用 -1，攻击牌费用 +1（最低 0）。", RelicRarity.BOSS,
+                Set.of(),
+                (trigger, ctx) -> {
+                },
+                (instance, cost) -> switch (instance.card().type()) {
+                    case ATTACK -> cost + 1;
+                    case SKILL -> Math.max(0, cost - 1);
+                    default -> cost;
+                }));
+
+        // 无差别减费，代价转移到承伤。注意 DAMAGE_TAKEN 拿到的是「易伤结算前」的原始伤害，
+        // 所以穿这 25% 与易伤 +50% 是**叠乘**关系，最高会到 1.875 倍 —— 描述里写清楚了。
+        register(TWIN_CURSE, () -> new SimpleRelic(TWIN_CURSE, "双刃",
+                "你打出的所有牌费用 -1（最低 0）；你受到的伤害 +25%（与易伤叠乘）。",
+                RelicRarity.BOSS,
+                Set.of(RelicTrigger.DAMAGE_TAKEN),
+                (trigger, ctx) -> ctx.multiplyValue(1.25),
+                (instance, cost) -> cost - 1));
+
+        // 代价用「定额」而不是「比例」：血多时便宜、血少时要命，
+        // 与「猩红王冠」的 20% 当前生命正好构成两种风险口味。
+        register(PREDATORS_CREST, () -> new SimpleRelic(PREDATORS_CREST, "猎首徽记",
+                "击杀怪物时获得 2 层力量；每场战斗开始时失去 10 点生命。", RelicRarity.BOSS,
+                Set.of(RelicTrigger.ENEMY_KILLED, RelicTrigger.BATTLE_START),
+                (trigger, ctx) -> {
+                    if (trigger == RelicTrigger.ENEMY_KILLED) {
+                        ctx.player().addStacks(StatusEffect.STRENGTH, 2);
+                        ctx.log("「猎首徽记」触发：获得 2 层力量。");
+                        return;
+                    }
+                    int before = ctx.player().getHealth();
+                    int after = Math.max(1, before - 10);
+                    ctx.player().setHealth(after);
+                    if (before > after) {
+                        ctx.log("「猎首徽记」代价：失去 " + (before - after) + " 点生命。");
+                    }
+                }));
+
+        // 毒不吃 DAMAGE_DEALT（中毒走 takeDamage），所以「伤害 -10%」几乎不伤毒的输出，
+        // 只惩罚顺手平砍 —— 把构筑方向明确推向「毒是主输出」。
+        // 开战类效果用 addAllMonsterStacks：只毒锁定目标的话，多怪场合这件遗物等于废掉。
+        register(VENOM_HEART, () -> new SimpleRelic(VENOM_HEART, "毒心",
+                "战斗开始时给全体怪物 5 层中毒；你造成的伤害 -10%。", RelicRarity.BOSS,
+                Set.of(RelicTrigger.BATTLE_START, RelicTrigger.DAMAGE_DEALT),
+                (trigger, ctx) -> {
+                    if (trigger == RelicTrigger.DAMAGE_DEALT) {
+                        ctx.multiplyValue(0.9);
+                        return;
+                    }
+                    if (ctx.battle() == null) {
+                        return;
+                    }
+                    ctx.battle().addAllMonsterStacks(StatusEffect.POISON, 5);
+                    ctx.log("「毒心」触发：全体怪物获得 5 层中毒。");
+                }));
+
+        // 全池唯一一件「削减能量」的遗物：3 能量变 2 能量 ≈ 每回合少打一张牌，
+        // 所以 +80% 伤害并不是白给。依赖本批次新增的 Player.reduceMaxEnergy。
+        register(ASCETIC_VOW, () -> new SimpleRelic(ASCETIC_VOW, "苦修誓约",
+                "获得时：能量上限 -1；你造成的伤害 +80%，每回合开始时获得 3 点护甲。",
+                RelicRarity.BOSS,
+                Set.of(RelicTrigger.OBTAIN, RelicTrigger.TURN_START,
+                        RelicTrigger.DAMAGE_DEALT),
+                (trigger, ctx) -> {
+                    switch (trigger) {
+                        case OBTAIN -> {
+                            ctx.player().reduceMaxEnergy(1);
+                            ctx.log("「苦修誓约」代价：能量上限 -1。");
+                        }
+                        case TURN_START -> {
+                            ctx.player().addArmor(3);
+                            ctx.log("「苦修誓约」触发：获得 3 点护甲。");
+                        }
+                        default -> ctx.multiplyValue(1.8);
+                    }
+                }));
+
+        // 纯状态赌博：力量是整场的，易伤每回合末 -1 所以 4 层 = 前 4 回合承伤 +50%。
+        // 危险窗口明确落在开局。BATTLE_START 在 resetForBattle 之后触发，这两层不会被清掉。
+        register(BLOODLUST_SIGIL, () -> new SimpleRelic(BLOODLUST_SIGIL, "嗜血纹章",
+                "战斗开始时获得 4 层力量与 4 层易伤。", RelicRarity.BOSS,
+                Set.of(RelicTrigger.BATTLE_START),
+                (trigger, ctx) -> {
+                    ctx.player().addStacks(StatusEffect.STRENGTH, 4);
+                    ctx.player().addStacks(StatusEffect.VULNERABLE, 4);
+                    ctx.log("「嗜血纹章」触发：获得 4 层力量与 4 层易伤。");
                 }));
     }
 
@@ -613,6 +763,9 @@ public final class RelicLibrary {
      * <p>与 {@link #randomReward} 的区别是这里要返回<b>多件互不重复</b>的遗物，
      * 且只从 {@link RelicRarity#BOSS} 里挑——Boss 遗物不进常规掉落池。</p>
      *
+     * <p>{@link #BOSS_POOL_EXCLUDED} 里的剧情道具（「高塔之匙」）虽然稀有度是 BOSS，
+     * 但没有战斗效果，不会出现在这里——否则玩家会抽到一个「死选项」。</p>
+     *
      * <p>本方法只负责「选出候选」，实际获得仍需玩家通过
      * {@code RelicService.acquire} 领取；未被选中的候选不产生任何副作用。</p>
      *
@@ -628,6 +781,7 @@ public final class RelicLibrary {
         List<Relic> candidates = new ArrayList<>();
         for (Relic relic : all()) {
             if (relic.rarity() == RelicRarity.BOSS
+                    && !BOSS_POOL_EXCLUDED.contains(relic.id())
                     && !player.hasRelicById(relic.id())) {
                 candidates.add(relic);
             }

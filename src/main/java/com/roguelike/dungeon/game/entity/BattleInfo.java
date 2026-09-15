@@ -46,6 +46,26 @@ public interface BattleInfo {
     void addMonsterStacks(StatusEffect effect, int amount);
 
     /**
+     * 给<b>场上全体存活怪物</b>叠加状态层数。
+     *
+     * <p>与 {@link #addMonsterStacks(StatusEffect, int)} 的区别很重要：后者只作用于
+     * {@code 当前锁定目标}，多怪编队下会漏掉其余的怪。据此约定两条语义：</p>
+     *
+     * <ul>
+     *   <li><b>开战布局类</b>（战斗开始时施加的虚弱 / 中毒等）用本方法，作用于全体 ——
+     *       这类效果表达的是「我削弱了这伙敌人」，而不是「我集火某一只」。</li>
+     *   <li><b>战斗过程中的累积类</b>（每回合、每打出若干张牌触发的效果）仍用
+     *       {@link #addMonsterStacks(StatusEffect, int)}，落在锁定目标身上 ——
+     *       这类效果应当尊重玩家的集火选择，否则「选择打哪只」就失去意义。</li>
+     * </ul>
+     *
+     * <p>默认实现退化为单目标叠加，便于既有实现平滑过渡。</p>
+     */
+    default void addAllMonsterStacks(StatusEffect effect, int amount) {
+        addMonsterStacks(effect, amount);
+    }
+
+    /**
      * 直接扣除怪物生命，<b>无视护甲</b>，用于「手里剑」这类穿透伤害。
      *
      * <p>该方法不会再触发 {@link RelicTrigger#DAMAGE_DEALT}，
