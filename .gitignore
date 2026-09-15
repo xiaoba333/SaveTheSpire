@@ -6,3 +6,6 @@ target/
 .settings/
 *.class
 .DS_Store
+
+# 后端启动脚本 run-server.bat 的运行时日志（不该进仓库）
+server-run.log
