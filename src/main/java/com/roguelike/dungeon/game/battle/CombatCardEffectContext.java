@@ -122,6 +122,16 @@ public final class CombatCardEffectContext implements CardEffectContext {
     }
 
     @Override
+    public void addBonusEnergy(int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        int before = player.getEnergy();
+        player.gainBonusEnergy(amount);
+        log("玩家获得 " + (player.getEnergy() - before) + " 点能量（可突破上限）。");
+    }
+
+    @Override
     public boolean isUpgraded() {
         return upgraded;
     }

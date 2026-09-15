@@ -67,6 +67,16 @@ class CombatCardEffectContextTest {
     }
 
     @Test
+    void addBonusEnergyShouldExceedMaxEnergy() {
+        BattleState state = readyState();   // 玩家能量上限 3，初始 3
+        CombatCardEffectContext context = newContext(state, false);
+
+        context.addBonusEnergy(2);
+
+        assertEquals(5, state.getPlayer().getEnergy());
+    }
+
+    @Test
     void upgradeCardShouldNotifyHandler() {
         BattleState state = readyState();
         List<CardInstance> upgraded = new ArrayList<>();

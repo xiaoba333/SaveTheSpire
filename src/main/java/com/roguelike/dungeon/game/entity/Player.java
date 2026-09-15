@@ -148,6 +148,22 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         energy = clamp(energy + amount, 0, maxEnergy);
     }
 
+    /**
+     * 获得「可突破上限」的能量：直接累加到当前能量，不受 {@code maxEnergy} 限制。
+     *
+     * <p>与 {@link #addEnergy(int)} 的区别是本方法不夹上限，用于实现
+     * 「每回合额外获得能量，但只能本回合用」这类效果。回合开始时
+     * {@link #refresh()} 仍会把能量重置回 {@code maxEnergy}，超出部分自然丢弃。</p>
+     *
+     * @param amount 获得的能量，amount &lt;= 0 时忽略
+     */
+    public void gainBonusEnergy(int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        energy += amount;
+    }
+
     @Override
     public boolean consume(int cost) {
         if (cost <= 0) {

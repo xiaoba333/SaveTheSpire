@@ -36,6 +36,9 @@ public interface CardEffectContext {
     /** 为玩家增加当前回合能量。 */
     void addPlayerEnergy(int amount);
 
+    /** 为玩家增加可突破上限的能量（回合开始刷新时回到上限）。 */
+    void addBonusEnergy(int amount);
+
     /** 当前卡牌实例是否已经升级。 */
     boolean isUpgraded();
 
