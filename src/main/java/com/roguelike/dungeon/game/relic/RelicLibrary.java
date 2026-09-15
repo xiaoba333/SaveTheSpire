@@ -53,12 +53,62 @@ public final class RelicLibrary {
     public static final String PHOENIX_FEATHER = "phoenix_feather";
     public static final String GLASS_CANNON = "glass_cannon";
     public static final String GREEDY_CUP = "greedy_cup";
+
+    // ---------- 扩充：普通 ----------
+
+    /** 铁誓：每回合开始获得护甲。 */
+    public static final String IRON_WILL = "iron_will";
+    /** 拾荒者：击杀时回血并叠甲。 */
+    public static final String SCAVENGER = "scavenger";
+    /** 沉稳之手：每回合第一张牌叠甲。 */
+    public static final String STEADY_HANDS = "steady_hands";
+    /** 惯性：每累计打出 5 张牌造成穿透伤害。 */
+    public static final String MOMENTUM = "momentum";
+    /** 回气：回合结束能量耗尽时叠甲。 */
+    public static final String SECOND_WIND = "second_wind";
+
+    // ---------- 扩充：罕见 ----------
+
+    /** 毒华：每累计 3 张技能牌给怪物中毒。 */
+    public static final String TOXIC_BLOOM = "toxic_bloom";
+    /** 嗜血獠牙：以伤害换回血。 */
+    public static final String BLOODTHIRSTY_FANG = "bloodthirsty_fang";
+    /** 符印之墙：多出牌换护甲。 */
+    public static final String WALL_OF_SIGILS = "wall_of_sigils";
+    /** 过载核心：回合结束按出牌数造成穿透伤害。 */
+    public static final String OVERLOAD_CORE = "overload_core";
+    /** 掠食凶性：每累计 4 张攻击牌叠力量。 */
+    public static final String PREDATORS_FEROCITY = "predators_ferocity";
+
+    // ---------- 扩充：稀有 ----------
+
+    /** 势不可挡：回合结束按当前护甲造成穿透伤害。 */
+    public static final String JUGGERNAUT = "juggernaut";
+    /** 收割灵魂：击杀永久提升最大生命。 */
+    public static final String SOUL_HARVEST = "soul_harvest";
+    /** 回响之室：每回合第一张牌免费。 */
+    public static final String ECHO_CHAMBER = "echo_chamber";
+
+    // ---------- 扩充：Boss ----------
+
     public static final String DARK_PACT = "dark_pact";
+<<<<<<< HEAD
     public static final String TOWER_KEY = "tower_key";
     public static final String CRIMSON_CROWN = "crimson_crown";
     public static final String LEVIATHAN_HEART = "leviathan_heart";
     public static final String AEGIS_OF_RUIN = "aegis_of_ruin";
     public static final String SOULBOUND_LEDGER = "soulbound_ledger";
+=======
+    /** 猩红王冠：以生命换爆发伤害。 */
+    public static final String CRIMSON_CROWN = "crimson_crown";
+    /** 利维坦之心：以持续掉血换巨大生命池。 */
+    public static final String LEVIATHAN_HEART = "leviathan_heart";
+    /** 废墟之盾：以输出换稳定护甲。 */
+    public static final String AEGIS_OF_RUIN = "aegis_of_ruin";
+    /** 缚魂账簿：以开战掉上限换每战成长。 */
+    public static final String SOULBOUND_LEDGER = "soulbound_ledger";
+    /** 末日之钟：周期性爆发伤害。 */
+>>>>>>> origin/dev
     public static final String DOOMSDAY_CLOCK = "doomsday_clock";
 
     /**
@@ -166,6 +216,60 @@ public final class RelicLibrary {
                     }
                 }));
 
+        register(IRON_WILL, () -> new SimpleRelic(IRON_WILL, "铁誓",
+                "每回合开始时获得 3 点护甲。", RelicRarity.COMMON,
+                Set.of(RelicTrigger.TURN_START),
+                (trigger, ctx) -> {
+                    ctx.player().addArmor(3);
+                    ctx.log("「铁誓」触发：获得 3 点护甲。");
+                }));
+
+        register(SCAVENGER, () -> new SimpleRelic(SCAVENGER, "拾荒者",
+                "击杀怪物时回复 2 点生命并获得 5 点护甲。", RelicRarity.COMMON,
+                Set.of(RelicTrigger.ENEMY_KILLED),
+                (trigger, ctx) -> {
+                    ctx.player().heal(2);
+                    ctx.player().addArmor(5);
+                    ctx.log("「拾荒者」触发：回复 2 点生命，获得 5 点护甲。");
+                }));
+
+        register(STEADY_HANDS, () -> new SimpleRelic(STEADY_HANDS, "沉稳之手",
+                "每回合打出的第 1 张牌使你获得 2 点护甲。", RelicRarity.COMMON,
+                Set.of(RelicTrigger.CARD_PLAYED),
+                (trigger, ctx) -> {
+                    if (ctx.battle() == null
+                            || ctx.battle().cardsPlayedThisTurn() != 1) {
+                        return;
+                    }
+                    ctx.player().addArmor(2);
+                    ctx.log("「沉稳之手」触发：获得 2 点护甲。");
+                }));
+
+        register(MOMENTUM, () -> new SimpleRelic(MOMENTUM, "惯性",
+                "每累计打出 5 张牌，对怪物造成 3 点无视护甲的伤害。", RelicRarity.COMMON,
+                Set.of(RelicTrigger.CARD_PLAYED),
+                (trigger, ctx) -> {
+                    if (ctx.battle() == null
+                            || ctx.battle().cardsPlayedThisBattle() % 5 != 0) {
+                        return;
+                    }
+                    int dealt = ctx.battle().dealDirectDamageToMonster(3);
+                    if (dealt > 0) {
+                        ctx.log("「惯性」触发：造成 " + dealt + " 点无视护甲伤害。");
+                    }
+                }));
+
+        register(SECOND_WIND, () -> new SimpleRelic(SECOND_WIND, "回气",
+                "回合结束时若能量为 0，获得 3 点护甲。", RelicRarity.COMMON,
+                Set.of(RelicTrigger.TURN_END),
+                (trigger, ctx) -> {
+                    if (ctx.player().getEnergy() != 0) {
+                        return;
+                    }
+                    ctx.player().addArmor(3);
+                    ctx.log("「回气」触发：获得 3 点护甲。");
+                }));
+
         // ==================== 罕见 ====================
 
         register(KUNAI, () -> new SimpleRelic(KUNAI, "苦无",
@@ -192,6 +296,71 @@ public final class RelicLibrary {
                     if (dealt > 0) {
                         ctx.log("「手里剑」触发：造成 " + dealt + " 点无视护甲伤害。");
                     }
+                }));
+
+        register(TOXIC_BLOOM, () -> new SimpleRelic(TOXIC_BLOOM, "毒华",
+                "每累计打出 3 张技能牌，给怪物 2 层中毒。", RelicRarity.UNCOMMON,
+                Set.of(RelicTrigger.CARD_PLAYED),
+                (trigger, ctx) -> {
+                    if (ctx.battle() == null
+                            || ctx.battle().skillsPlayedThisBattle() % 3 != 0) {
+                        return;
+                    }
+                    ctx.battle().addMonsterStacks(StatusEffect.POISON, 2);
+                    ctx.log("「毒华」触发：怪物获得 2 层中毒。");
+                }));
+
+        register(BLOODTHIRSTY_FANG, () -> new SimpleRelic(BLOODTHIRSTY_FANG, "嗜血獠牙",
+                "你造成的伤害 -1；每次造成伤害时回复 1 点生命。", RelicRarity.UNCOMMON,
+                Set.of(RelicTrigger.DAMAGE_DEALT),
+                (trigger, ctx) -> {
+                    ctx.addValue(-1);
+                    int before = ctx.player().getHealth();
+                    ctx.player().heal(1);
+                    if (ctx.player().getHealth() > before) {
+                        ctx.log("「嗜血獠牙」触发：回复 1 点生命。");
+                    }
+                }));
+
+        register(WALL_OF_SIGILS, () -> new SimpleRelic(WALL_OF_SIGILS, "符印之墙",
+                "回合结束时若本回合打出至少 3 张牌，获得 6 点护甲。", RelicRarity.UNCOMMON,
+                Set.of(RelicTrigger.TURN_END),
+                (trigger, ctx) -> {
+                    if (ctx.battle() == null
+                            || ctx.battle().cardsPlayedThisTurn() < 3) {
+                        return;
+                    }
+                    ctx.player().addArmor(6);
+                    ctx.log("「符印之墙」触发：获得 6 点护甲。");
+                }));
+
+        register(OVERLOAD_CORE, () -> new SimpleRelic(OVERLOAD_CORE, "过载核心",
+                "回合结束时，造成等于本回合已打出牌数 ×2 的无视护甲伤害。", RelicRarity.UNCOMMON,
+                Set.of(RelicTrigger.TURN_END),
+                (trigger, ctx) -> {
+                    if (ctx.battle() == null) {
+                        return;
+                    }
+                    int amount = ctx.battle().cardsPlayedThisTurn() * 2;
+                    if (amount <= 0) {
+                        return;
+                    }
+                    int dealt = ctx.battle().dealDirectDamageToMonster(amount);
+                    if (dealt > 0) {
+                        ctx.log("「过载核心」触发：造成 " + dealt + " 点无视护甲伤害。");
+                    }
+                }));
+
+        register(PREDATORS_FEROCITY, () -> new SimpleRelic(PREDATORS_FEROCITY, "掠食凶性",
+                "每累计打出 4 张攻击牌，获得 1 层力量。", RelicRarity.UNCOMMON,
+                Set.of(RelicTrigger.CARD_PLAYED),
+                (trigger, ctx) -> {
+                    if (!isAttack(ctx) || ctx.battle() == null
+                            || ctx.battle().attacksPlayedThisBattle() % 4 != 0) {
+                        return;
+                    }
+                    ctx.player().addStacks(StatusEffect.STRENGTH, 1);
+                    ctx.log("「掠食凶性」触发：获得 1 层力量。");
                 }));
 
         register(BLOOD_LETTING_VALVE, BloodlettingValveRelic::new);
@@ -229,6 +398,33 @@ public final class RelicLibrary {
                     ctx.log("「贪婪之杯」触发：能量上限 +1，最大生命 -8。");
                 }));
 
+        register(JUGGERNAUT, () -> new SimpleRelic(JUGGERNAUT, "势不可挡",
+                "回合结束时，造成等于你当前护甲 50% 的无视护甲伤害。", RelicRarity.RARE,
+                Set.of(RelicTrigger.TURN_END),
+                (trigger, ctx) -> {
+                    if (ctx.battle() == null) {
+                        return;
+                    }
+                    int amount = ctx.player().getArmor() / 2;
+                    if (amount <= 0) {
+                        return;
+                    }
+                    int dealt = ctx.battle().dealDirectDamageToMonster(amount);
+                    if (dealt > 0) {
+                        ctx.log("「势不可挡」触发：造成 " + dealt + " 点无视护甲伤害。");
+                    }
+                }));
+
+        register(SOUL_HARVEST, () -> new SimpleRelic(SOUL_HARVEST, "收割灵魂",
+                "击杀怪物时，本局最大生命 +3（并回复等量生命）。", RelicRarity.RARE,
+                Set.of(RelicTrigger.ENEMY_KILLED),
+                (trigger, ctx) -> {
+                    ctx.player().increaseMaxHealth(3);
+                    ctx.log("「收割灵魂」触发：最大生命 +3。");
+                }));
+
+        register(ECHO_CHAMBER, EchoChamberRelic::new);
+
         // ==================== Boss ====================
 
         register(DARK_PACT, () -> new SimpleRelic(DARK_PACT, "黑暗契约",
@@ -240,6 +436,7 @@ public final class RelicLibrary {
                     ctx.log("「黑暗契约」触发：能量上限 +1，最大生命 -12。");
                 }));
 
+<<<<<<< HEAD
         register(TOWER_KEY, () -> new SimpleRelic(TOWER_KEY, "高塔之匙",
                 "更深度探索的钥匙......", RelicRarity.BOSS,
                 Set.of(),
@@ -247,6 +444,8 @@ public final class RelicLibrary {
                     // 占位遗物：目前没有战斗效果。
                 }));
 
+=======
+>>>>>>> origin/dev
         register(CRIMSON_CROWN, () -> new SimpleRelic(CRIMSON_CROWN, "猩红王冠",
                 "你造成的伤害 +35%；每场战斗开始时失去 20% 当前生命。", RelicRarity.BOSS,
                 Set.of(RelicTrigger.DAMAGE_DEALT, RelicTrigger.BATTLE_START),
@@ -410,5 +609,48 @@ public final class RelicLibrary {
         }
         Collections.shuffle(candidates, new Random(seed));
         return Optional.of(candidates.get(0));
+    }
+
+    /** 全部 Boss 遗物编号，按定义顺序。 */
+    public static List<String> bossIds() {
+        List<String> ids = new ArrayList<>();
+        for (Relic relic : all()) {
+            if (relic.rarity() == RelicRarity.BOSS) {
+                ids.add(relic.id());
+            }
+        }
+        return List.copyOf(ids);
+    }
+
+    /**
+     * Boss 遗物候选：随机取 {@code count} 件玩家尚未持有的 Boss 遗物，供玩家三选一。
+     *
+     * <p>与 {@link #randomReward} 的区别是这里要返回<b>多件互不重复</b>的遗物，
+     * 且只从 {@link RelicRarity#BOSS} 里挑——Boss 遗物不进常规掉落池。</p>
+     *
+     * <p>本方法只负责「选出候选」，实际获得仍需玩家通过
+     * {@code RelicService.acquire} 领取；未被选中的候选不产生任何副作用。</p>
+     *
+     * @param seed   随机种子，保证同一局面结果可复现
+     * @param player 当前玩家，用于排除已持有的 Boss 遗物
+     * @param count  期望候选数量；不足时返回现有全部
+     * @return 候选遗物列表，可能为空（Boss 遗物已全部持有）
+     */
+    public static List<Relic> bossChoices(long seed, Player player, int count) {
+        if (count <= 0) {
+            return List.of();
+        }
+        List<Relic> candidates = new ArrayList<>();
+        for (Relic relic : all()) {
+            if (relic.rarity() == RelicRarity.BOSS
+                    && !player.hasRelicById(relic.id())) {
+                candidates.add(relic);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        Collections.shuffle(candidates, new Random(seed));
+        return List.copyOf(candidates.subList(0, Math.min(count, candidates.size())));
     }
 }

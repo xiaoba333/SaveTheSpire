@@ -336,7 +336,11 @@ public final class GameController implements LevelFinishHandler {
     }
 
     /**
+<<<<<<< HEAD
      * 按节点类型挑选怪物；第二层暂与第一层共用同一图鉴。
+=======
+     * 按节点类型挑选第一章怪物。
+>>>>>>> origin/dev
      *
      * <p>普通战斗改为走<b>编队</b>池，因此会正常出现双怪遭遇
      * （两条蛆、探险者二人组），玩家需要在战斗中选择先打哪一只。
@@ -344,7 +348,7 @@ public final class GameController implements LevelFinishHandler {
      */
     private MonsterAi pickMonster(MapNode node) {
         return switch (node.type()) {
-            case BATTLE -> MonsterCatalog.randomEasy(rewardSeed(node));
+            case BATTLE -> MonsterCatalog.randomEncounter(rewardSeed(node));
             case ELITE -> MonsterCatalog.elite();
             case BOSS -> MonsterCatalog.boss(runState.shouldSmashAlmostCrackedEgg());
             default -> throw new IllegalStateException(

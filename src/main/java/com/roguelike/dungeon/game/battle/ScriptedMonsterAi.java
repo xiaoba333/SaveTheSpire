@@ -64,6 +64,12 @@ public final class ScriptedMonsterAi implements MonsterAi {
         return monster.displayName();
     }
 
+    /** 怪物英文标识，前端按此选择敌人视觉。 */
+    @Override
+    public String id() {
+        return monster.id();
+    }
+
     @Override
     public int maxHp() {
         return monster.getMaxHealth();
@@ -237,6 +243,10 @@ public final class ScriptedMonsterAi implements MonsterAi {
 
         @Override
         public List<Monster> allMonsters() {
+            // 单怪编队：名册里只有自己，但仍从战斗状态读，保证与多怪路径同一语义。
+            if (boundState != null && boundState.hasRoster()) {
+                return boundState.getMonsters();
+            }
             return List.of(monster);
         }
 
@@ -254,7 +264,11 @@ public final class ScriptedMonsterAi implements MonsterAi {
         public Monster transform(Monster oldForm, MonsterDefinition newForm) {
             Monster born = new Monster(newForm);
             monster = born;
-            boundState.bindLivingMonster(born);
+            if (boundState.hasRoster()) {
+                boundState.replaceMonster(oldForm, born);
+            } else {
+                boundState.bindLivingMonster(born);
+            }
             return born;
         }
 
