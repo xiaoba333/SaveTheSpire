@@ -19,10 +19,11 @@ public final class HttpServerMain {
 
     public static void main(String[] args) throws IOException {
         int port = resolvePort();
-        BattleServer server = new BattleServer(port);
+        GameServer server = new GameServer(port);
         server.start();
         System.out.println("SaveTheSpire 后端 HTTP 已启动：http://localhost:"
-                + port + "/api/v1/battles");
+                + port + "/api/v1/");
+        System.out.println("选角：GET /api/v1/characters ，开局：POST /api/v1/runs");
     }
 
     private static int resolvePort() {

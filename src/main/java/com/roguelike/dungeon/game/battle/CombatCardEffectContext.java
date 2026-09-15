@@ -6,6 +6,7 @@ import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
 import com.roguelike.dungeon.game.entity.Power;
 import com.roguelike.dungeon.game.entity.StatusEffect;
+import com.roguelike.dungeon.game.enemy.Monster;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -15,6 +16,10 @@ import java.util.function.Consumer;
  *
  * <p>只依赖 {@link BattleState} 与回调，不引用 {@link Combat}。
  * 卡牌效果只调用 {@link CardEffectContext} 方法。</p>
+ *
+ * <p><b>目标语义</b>：单目标操作（伤害 / 叠状态 / 上护甲）落在
+ * {@link BattleState#getTarget()}——也就是玩家当前锁定的那只敌人身上；
+ * 多目标操作遍历场上全部存活怪。卡牌本身不需要知道有几只敌人。</p>
  */
 public final class CombatCardEffectContext implements CardEffectContext {
 
@@ -25,6 +30,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
     private final Consumer<CardInstance> cardUpgradeHandler;
     private final String targetCardId;
     private final boolean upgraded;
+    private final int xCost;
 
     /**
      * @param state 当前战斗状态
@@ -32,13 +38,15 @@ public final class CombatCardEffectContext implements CardEffectContext {
      * @param cardUpgradeHandler 手牌升级后同步永久牌组
      * @param targetCardId 锻造牌要升级的目标手牌实例 id；非锻造牌为 null
      * @param upgraded 当前打出的牌实例是否已经升级
+     * @param xCost X 费用卡牌消耗的能量；非 X 费用卡牌为 0
      */
     public CombatCardEffectContext(
             BattleState state,
             Consumer<String> logger,
             Consumer<CardInstance> cardUpgradeHandler,
             String targetCardId,
-            boolean upgraded) {
+            boolean upgraded,
+            int xCost) {
         this.state = Objects.requireNonNull(state, "战斗状态不能为 null");
         this.player = state.getPlayer();
         this.piles = state.getPiles();
@@ -47,12 +55,17 @@ public final class CombatCardEffectContext implements CardEffectContext {
                 cardUpgradeHandler, "卡牌升级处理器不能为 null");
         this.targetCardId = targetCardId;
         this.upgraded = upgraded;
+        this.xCost = xCost;
     }
 
     @Override
     public boolean dealDamageToMonster(int amount) {
+        Monster target = state.getTarget();
         int dealt = state.applyDamage(true, normalizeAmount(amount));
-        log("对怪物造成 " + dealt + " 点伤害。");
+        log("对" + targetName(target) + "造成 " + dealt + " 点伤害。");
+        if (target != null) {
+            return target.isDead();
+        }
         return state.getMonsterHp() <= 0;
     }
 
@@ -62,7 +75,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
             return;
         }
         state.addMonsterBlock(amount);
-        log("怪物获得 " + amount + " 点护甲。");
+        log(targetName(state.getTarget()) + "获得 " + amount + " 点护甲。");
     }
 
     @Override
@@ -70,6 +83,7 @@ public final class CombatCardEffectContext implements CardEffectContext {
         // 自伤类卡牌不参与默认倍率，避免升级后反而更亏。
         int dealt = state.applyDamage(false, normalizeAmount(amount));
         log("玩家受到 " + dealt + " 点伤害。");
+        player.triggerSelfDamage(dealt);
     }
 
     @Override
@@ -118,6 +132,11 @@ public final class CombatCardEffectContext implements CardEffectContext {
     }
 
     @Override
+    public int getPlayerBlock() {
+        return player.getArmor();
+    }
+
+    @Override
     public int getPlayerMaxHealth() {
         return player.getMaxHealth();
     }
@@ -135,11 +154,35 @@ public final class CombatCardEffectContext implements CardEffectContext {
     @Override
     public void applyStatusToMonster(StatusEffect effect, int amount) {
         state.addMonsterStatus(effect, amount);
+        log(targetName(state.getTarget()) + "获得 " + amount + " 层" + effect.displayName() + "。");
     }
 
     @Override
     public void applyStatusToPlayer(StatusEffect effect, int amount) {
         player.addStacks(effect, amount);
+    }
+
+    @Override
+    public void dealDamageToAllMonsters(int amount) {
+        int hit = state.applyDamageToAllMonsters(normalizeAmount(amount));
+        log("对所有敌人造成伤害（命中 " + hit + " 个目标）。");
+    }
+
+    @Override
+    public void applyStatusToAllMonsters(StatusEffect effect, int amount) {
+        int hit = state.applyStatusToAllMonsters(effect, amount);
+        log("对全体敌人施加 " + amount + " 层" + effect.displayName()
+                + "（命中 " + hit + " 个目标）。");
+    }
+
+    /** 当前锁定目标的展示名；木桩模式下返回「怪物」。 */
+    private static String targetName(Monster target) {
+        return target == null ? "怪物" : target.displayName();
+    }
+
+    @Override
+    public int getXCost() {
+        return xCost;
     }
 
     @Override

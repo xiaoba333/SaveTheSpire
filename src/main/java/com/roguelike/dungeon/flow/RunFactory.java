@@ -5,6 +5,7 @@ import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.character.CharacterCatalog;
 import com.roguelike.dungeon.game.character.CharacterDefinition;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.RelicLibrary;
 import com.roguelike.dungeon.game.run.RunState;
 
 import java.util.List;
@@ -38,6 +39,9 @@ public final class RunFactory {
             int totalActs) {
         CharacterDefinition character = catalog.getById(characterId);
         Player player = new Player(character.maxHealth(), character.maxEnergy());
+        if (!character.startingRelicId().isBlank()) {
+            player.addRelic(RelicLibrary.create(character.startingRelicId()));
+        }
         List<CardInstance> deck = character.startingCardIds().stream()
                 .map(CardLibrary::byId)
                 .map(card -> new CardInstance(UUID.randomUUID().toString(), card))

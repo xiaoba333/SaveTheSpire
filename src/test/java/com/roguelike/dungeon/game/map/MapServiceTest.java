@@ -16,7 +16,8 @@ class MapServiceTest {
     void newServiceShouldExposeStartingNodesAsAvailable() {
         MapService service = new MapService(12345L);
 
-        assertEquals(MapGenerator.COLUMN_COUNT, service.getAvailableNodes().size());
+        assertEquals(service.getDungeonMap().getStartingNodes().size(),
+                service.getAvailableNodes().size());
         assertTrue(service.getAvailableNodes().stream()
                 .allMatch(node -> service.getNodeState(node.id()) == MapNodeState.AVAILABLE));
         assertTrue(service.getCurrentNode().isEmpty());

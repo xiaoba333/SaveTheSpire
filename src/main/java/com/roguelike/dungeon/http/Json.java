@@ -46,6 +46,8 @@ public final class Json {
 
     private static final Pattern STRING_FIELD = Pattern.compile(
             "\"([^\"]*)\"\\s*:\\s*\"([^\"]*)\"");
+    private static final Pattern NUMBER_FIELD = Pattern.compile(
+            "\"([^\"]*)\"\\s*:\\s*(-?\\d+)");
 
     /**
      * 从 JSON 对象里提取某个 string 字段的取值；找不到返回 {@code null}。
@@ -59,6 +61,20 @@ public final class Json {
         while (m.find()) {
             if (key.equals(m.group(1))) {
                 return m.group(2);
+            }
+        }
+        return null;
+    }
+
+    /** 从 JSON 对象里提取某个整数字段；找不到返回 {@code null}。 */
+    public static Long longField(String json, String key) {
+        if (json == null) {
+            return null;
+        }
+        Matcher matcher = NUMBER_FIELD.matcher(json);
+        while (matcher.find()) {
+            if (key.equals(matcher.group(1))) {
+                return Long.parseLong(matcher.group(2));
             }
         }
         return null;

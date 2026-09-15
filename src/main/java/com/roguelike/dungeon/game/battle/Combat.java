@@ -7,6 +7,11 @@ import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.deck.CardPiles;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.entity.StatusEffect;
+import com.roguelike.dungeon.game.entity.Relic;
+import com.roguelike.dungeon.game.entity.RelicTrigger;
+import com.roguelike.dungeon.game.enemy.Monster;
+import com.roguelike.dungeon.game.relic.RelicService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +21,10 @@ import java.util.function.Consumer;
 
 /**
  * 战斗调度器：只管理回合生命周期，具体出牌与怪物 AI 交给下层服务。
+ *
+ * <p>支持单怪与多怪两种编队：怪物由 {@link MonsterAi} 驱动，编队名册存在
+ * {@link BattleState} 上。玩家可通过 {@link #selectTarget(int)} 指定后续
+ * 单目标伤害落在哪一只敌人身上——这就是「选择敌人打击」的入口。</p>
  */
 public class Combat {
 
@@ -27,6 +36,8 @@ public class Combat {
     private final BattleEventBus eventBus;
     private final CardPlayService cardPlayService;
     private final MonsterAi monsterAi;
+    /** 本局共享的遗物分发器；为 null 表示本场战斗不结算遗物。 */
+    private final RelicService relicService;
     private final Consumer<String> logger;
 
     private final List<String> newLogs = new ArrayList<>();
@@ -41,7 +52,7 @@ public class Combat {
                 logger,
                 result -> { },
                 upgradedCard -> { },
-                MonsterAiService.regular());
+                ScriptedMonsterAi.of("skeleton"));
     }
 
     /**
@@ -75,7 +86,7 @@ public class Combat {
                 logger,
                 finishHandler,
                 cardUpgradeHandler,
-                MonsterAiService.regular());
+                ScriptedMonsterAi.of("skeleton"));
     }
 
     /**
@@ -88,17 +99,47 @@ public class Combat {
             LevelFinishHandler finishHandler,
             Consumer<CardInstance> cardUpgradeHandler,
             MonsterAi monsterAi) {
+        this(player, battleDeck, logger, finishHandler,
+                cardUpgradeHandler, monsterAi, null);
+    }
+
+    /**
+     * 完整装配：额外注入本局的遗物分发器。
+     *
+     * <p>传入遗物分发器后，战斗流程会在各个触发点自动结算遗物，
+     * 并把当前 {@link BattleState} 绑定为遗物可读的战斗视图。</p>
+     *
+     * @param relicService 本局共享的遗物分发器；传 null 表示本场不结算遗物
+     */
+    public Combat(
+            Player player,
+            List<CardInstance> battleDeck,
+            Consumer<String> logger,
+            LevelFinishHandler finishHandler,
+            Consumer<CardInstance> cardUpgradeHandler,
+            MonsterAi monsterAi,
+            RelicService relicService) {
         Objects.requireNonNull(player, "玩家不能为 null");
         Objects.requireNonNull(battleDeck, "战斗牌组不能为 null");
         Objects.requireNonNull(finishHandler, "关卡结束处理器不能为 null");
         Objects.requireNonNull(cardUpgradeHandler, "卡牌升级处理器不能为 null");
         this.logger = Objects.requireNonNull(logger, "日志处理器不能为 null");
         this.monsterAi = Objects.requireNonNull(monsterAi, "怪物 AI 不能为 null");
+        // 多怪编队的友方技能（给同伴上甲 / 全体加力量）只有写进战斗日志才可被验证。
+        if (this.monsterAi instanceof MonsterEncounterAi encounterAi) {
+            encounterAi.setLogSink(this::log);
+        }
         this.state = new BattleState(
                 player, battleDeck, new CardPiles(logger), monsterAi.maxHp());
         this.eventBus = new BattleEventBus();
         this.eventBus.subscribeFinished(finishHandler);
-        this.cardPlayService = new CardPlayService(this::log, cardUpgradeHandler);
+        this.relicService = relicService;
+        if (this.relicService != null) {
+            this.relicService.bindBattle(this.state);
+            this.state.setRelicService(this.relicService);
+        }
+        this.cardPlayService = new CardPlayService(
+                this::log, cardUpgradeHandler, relicService);
         startNewFight();
     }
 
@@ -118,8 +159,133 @@ public class Combat {
         return monsterAi.name();
     }
 
+    /** 怪物英文标识，供 HTTP 层序列化为前端可识别的敌人视觉 id。 */
+    public String getMonsterId() {
+        return monsterAi.id();
+    }
+
     public int getMonsterBlock() {
         return state.getMonsterBlock();
+    }
+
+    // ---------- 多怪编队与目标选择 ----------
+
+    /** 本场敌人总数。 */
+    public int getMonsterCount() {
+        return state.getMonsters().size();
+    }
+
+    /** 本场是否多怪编队（敌人的选择才有意义）。 */
+    public boolean hasMultipleMonsters() {
+        return state.getMonsters().size() > 1;
+    }
+
+    /** 当前被锁定的攻击目标下标；无编队时返回 -1。 */
+    public int getTargetIndex() {
+        return state.getTargetIndex();
+    }
+
+    /**
+     * 切换攻击目标。之后所有单目标卡牌（打击、痛击、上状态等）都打向这一只。
+     *
+     * @param index 敌人下标，顺序与 {@link #getEnemies()} 一致（左 → 右）
+     * @return 是否切换成功；目标已死亡或下标越界时返回 false
+     */
+    public boolean selectTarget(int index) {
+        boolean changed = state.selectTarget(index);
+        if (changed) {
+            log("锁定目标：" + monsterAi.name() + "。");
+        }
+        return changed;
+    }
+
+    /**
+     * 按敌人英文 id 切换攻击目标（HTTP / 前端友好）。
+     *
+     * @return 是否切换成功
+     */
+    public boolean selectTargetById(String monsterId) {
+        boolean changed = state.selectTargetById(monsterId);
+        if (changed) {
+            log("锁定目标：" + monsterAi.name() + "。");
+        }
+        return changed;
+    }
+
+    /**
+     * 敌人快照列表，供 UI 渲染每个敌人的血条、护盾与意图。
+     *
+     * <p>下标即 {@link #selectTarget(int)} 接受的参数。</p>
+     */
+    public List<MonsterView> getEnemies() {
+        List<Monster> monsters = state.getMonsters();
+        if (monsters.isEmpty()) {
+            // 木桩模式（无怪物实体）也返回一条，保持前端渲染逻辑统一
+            return List.of(new MonsterView(
+                    0, monsterAi.id(), monsterAi.name(),
+                    state.getMonsterHp(), state.getMonsterMaxHp(), state.getMonsterBlock(),
+                    !state.isEncounterCleared(), true, 0, getMonsterIntentInfo()));
+        }
+        List<MonsterView> views = new ArrayList<>(monsters.size());
+        int targetIndex = state.getTargetIndex();
+        for (int i = 0; i < monsters.size(); i++) {
+            Monster monster = monsters.get(i);
+            MonsterAi.IntentSnapshot snapshot = monsterAi.intentInfoFor(state, monster);
+            Intent intent = snapshot == null
+                    ? null
+                    : new Intent(snapshot.type(), snapshot.value());
+            views.add(new MonsterView(
+                    i,
+                    monster.id(),
+                    monster.displayName(),
+                    monster.getHealth(),
+                    monster.getMaxHealth(),
+                    monster.getArmor(),
+                    !monster.isDead(),
+                    i == targetIndex,
+                    monster.getStrength(),
+                    intent));
+        }
+        return List.copyOf(views);
+    }
+
+    /** 某个敌人身上指定状态的层数（HTTP 层序列化 buff 用）。 */
+    public int getMonsterStatusStacks(int index, StatusEffect effect) {
+        List<Monster> monsters = state.getMonsters();
+        if (index < 0 || index >= monsters.size()) {
+            return state.getMonsterStatusStacks(effect);
+        }
+        return state.getMonsterStatusStacks(monsters.get(index), effect);
+    }
+
+    /** 编队摘要，例如「蛆 + 蛆」；战斗日志与调试用。 */
+    public String getEncounterSummary() {
+        if (monsterAi instanceof MonsterEncounterAi encounter) {
+            return encounter.rosterSummary();
+        }
+        return monsterAi.name();
+    }
+
+    /** 本场遭遇 id；单怪非编队 AI 返回怪物自身 id。 */
+    public String getEncounterId() {
+        if (monsterAi instanceof MonsterEncounterAi encounter) {
+            return encounter.encounterId();
+        }
+        return monsterAi.id();
+    }
+
+    /** 单个敌人的只读视图。 */
+    public record MonsterView(
+            int index,
+            String id,
+            String name,
+            int hp,
+            int maxHp,
+            int armor,
+            boolean alive,
+            boolean targeted,
+            int strength,
+            Intent intent) {
     }
 
     public int getEnergy() {
@@ -134,8 +300,23 @@ public class Combat {
         return state.getPlayer().getMaxEnergy();
     }
 
+    /** 当前玩家持有的遗物，按获得顺序，供界面展示。 */
+    public List<Relic> getRelics() {
+        return state.getPlayer().getRelics();
+    }
+
     public int getMonsterMaxHp() {
         return state.getMonsterMaxHp();
+    }
+
+    /** 本场战斗共享的玩家实体（HTTP 层序列化 buff / 状态用，只读）。 */
+    public Player getPlayer() {
+        return state.getPlayer();
+    }
+
+    /** 怪物指定状态的当前层数（HTTP 层序列化 buff 用，只读）。 */
+    public int getMonsterStatusStacks(StatusEffect effect) {
+        return state.getMonsterStatusStacks(effect);
     }
 
     public int getTurnNumber() {
@@ -203,6 +384,21 @@ public class Combat {
                 .toList();
     }
 
+    /**
+     * 抽牌堆的牌实例快照，供 HTTP 层序列化「查看抽牌堆」界面用。
+     *
+     * <p>与 {@link #getDrawPile()} 的区别：那个只给出卡牌定义，升级信息会丢；
+     * 界面要显示升级后的名称/费用/说明，所以这里给实例。下一张在列表末尾。</p>
+     */
+    public List<CardInstance> getDrawPileInstances() {
+        return List.copyOf(state.getPiles().getDrawPile());
+    }
+
+    /** 弃牌堆的牌实例快照，供 HTTP 层序列化「查看弃牌堆」界面用。最近弃入的在列表末尾。 */
+    public List<CardInstance> getDiscardPileInstances() {
+        return List.copyOf(state.getPiles().getDiscardPile());
+    }
+
     /** 界面展示怪物下一动，方便看清攻防循环。 */
     public String getMonsterIntent() {
         return monsterAi.intentText(state);
@@ -267,6 +463,10 @@ public class Combat {
             return;
         }
 
+        // 「回合结束」类遗物必须在这里结算：此时手牌还没弃、本回合护甲和剩余能量都可读，
+        // 「钙化壳」「放血槽」正是靠这一点把资源留到下个回合。
+        fireRelic(RelicTrigger.TURN_END, 0);
+
         state.getPiles().discardHand();
         log("玩家结束回合。");
 
@@ -274,12 +474,16 @@ public class Combat {
             return;
         }
 
-        MonsterAi.MonsterTurnResult monsterResult = monsterAi.takeTurn(state);
-        if (monsterResult.attacked()) {
-            log(monsterAi.name() + "攻击，对玩家造成 " + monsterResult.value() + " 点伤害。");
-        } else {
-            log(monsterAi.name() + "防御，获得 " + monsterResult.value() + " 点护盾。");
+        state.getPlayer().tickEndOfTurn();
+        // 多怪编队需要逐个记录行动摘要，先把「行动前」的敌人快照取下来。
+        List<MonsterView> actors = getEnemies().stream()
+                .filter(MonsterView::alive)
+                .toList();
+        monsterAi.takeTurn(state);
+        for (MonsterView actor : actors) {
+            log(actorLabel(actor, actors.size()) + " 行动：" + describeIntent(actor));
         }
+        state.tickMonsterStatuses();
         checkFinished();
         if (state.isFinished()) {
             return;
@@ -295,7 +499,9 @@ public class Combat {
         state.setMonsterHp(state.getMonsterMaxHp());
         state.setMonsterBlock(0);
         state.setMonsterWillAttack(true);
-        monsterAi.startFight();
+        monsterAi.startFight(state);
+        state.clearMonsterStatuses();
+        state.resetBattleCounters();
         state.setFinished(false);
         state.setResultText("");
         state.setResultCode(null);
@@ -304,12 +510,18 @@ public class Combat {
         state.getPiles().initializeInstances(state.getBattleDeck());
 
         log("战斗开始。玩家 HP " + player.getHealth()
-                + "，怪物 HP " + state.getMonsterHp() + "。");
+                + "，" + getEncounterSummary() + " HP "
+                + state.getMonsterHp() + "。");
         checkFinished();
         if (state.isFinished()) {
             return;
         }
         beginPlayerTurn();
+
+        // 「战斗开始」类遗物放在最后结算：beginPlayerTurn 会清空护甲，
+        // 提前给的开战护甲（如「船锚」）会被抹掉。
+        fireRelic(RelicTrigger.BATTLE_START, 0);
+        checkFinished();
     }
 
     /** 玩家回合开始：清空自身未消耗护盾（参考杀戮尖塔），触发能力，再抽满手牌。 */
@@ -319,23 +531,64 @@ public class Combat {
         player.clearArmor();
         player.refresh();
         player.triggerTurnStart();
+        state.resetTurnCounters();
+        // 「回合开始」类遗物在护甲清空、能量刷新之后结算，
+        // 「钙化壳」「放血槽」需要把上一回合存下的资源补回来。
+        fireRelic(RelicTrigger.TURN_START, 0);
         state.getPiles().drawToHandSize(HAND_SIZE);
         log("—— 玩家回合 —— 能量 " + player.getEnergy()
                 + "，抽牌 " + state.getPiles().getHandSize() + " 张。");
+    }
+
+    /** 分发一次遗物触发；未接入遗物时忽略。 */
+    private void fireRelic(RelicTrigger trigger, int value) {
+        if (relicService != null) {
+            relicService.fire(trigger, value);
+        }
     }
 
     private void checkFinished() {
         if (state.isFinished()) {
             return;
         }
-        if (state.getMonsterHp() <= 0) {
+        // Boss 蛋链：当前形态血量归零但还有下一形态时，先让它变身，不判胜。
+        // 多怪编队下血量归零的可能是「非锁定目标」，因此有编队时按名册里任意一只阵亡来判定；
+        // onHpDepleted 自身是幂等的——变形后该槽位重新存活，再次调用会返回 false。
+        boolean anyFormDepleted = state.hasRoster()
+                ? state.getMonsters().stream().anyMatch(Monster::isDead)
+                : state.getMonsterHp() <= 0;
+        if (anyFormDepleted && monsterAi.onHpDepleted(state)) {
+            log(monsterAi.name() + "接替上场（HP "
+                    + state.getMonsterHp() + "/" + state.getMonsterMaxHp() + "）。");
+            return;
+        }
+        if (state.isEncounterCleared()) {
+            // 多怪编队下「血畜」按全场累计结算：打死最后一只时一次性补最大生命。
+            int herdStacks = state.totalMonsterStacks(StatusEffect.BLOOD_HERD);
+            if (herdStacks > 0) {
+                state.getPlayer().increaseMaxHealth(herdStacks);
+                log("血畜触发：最大生命值 +" + herdStacks + "。");
+            }
             state.setFinished(true);
             state.setPlayerTurn(false);
             state.setResultText("胜利：怪物血量已归零。");
             state.setResultCode("VICTORY");
+            fireRelic(RelicTrigger.ENEMY_KILLED, 0);
             log(state.getResultText());
+            // 只在胜利时结算：失败会直接结束整局，回血没有意义。
+            fireRelic(RelicTrigger.BATTLE_END, 0);
             eventBus.publishFinished(LevelResult.COMPLETED);
         } else if (state.getPlayer().isDead()) {
+            if (state.getPlayer().hasStatus(StatusEffect.REBORN)) {
+                Player player = state.getPlayer();
+                int newMax = Math.max(1, player.getMaxHealth() / 2);
+                player.reduceMaxHealth(player.getMaxHealth() - newMax);
+                player.healToFull();
+                player.removeStatus(StatusEffect.REBORN);
+                player.addStacks(StatusEffect.WEAK, 99);
+                log("死而复生触发：最大生命值减半，回满生命，并获得 99 层虚弱。");
+                return;
+            }
             state.setFinished(true);
             state.setPlayerTurn(false);
             state.setResultText("失败：玩家血量已归零。");
@@ -351,6 +604,29 @@ public class Combat {
     private void log(String line) {
         logger.accept(line);
         newLogs.add(line);
+    }
+
+    /** 多怪时给同名的怪加上序号，日志里才分得清是哪一只在动。 */
+    private static String actorLabel(MonsterView actor, int total) {
+        return total > 1 ? actor.name() + " #" + (actor.index() + 1) : actor.name();
+    }
+
+    /** 把结构化意图翻成日志用中文。 */
+    private static String describeIntent(MonsterView actor) {
+        if (actor.intent() == null) {
+            return "待机";
+        }
+        return switch (actor.intent().type()) {
+            case "ATTACK" -> "攻击";
+            case "DEFEND" -> "防御";
+            case "ATTACK_DEBUFF" -> "攻击并施加减益";
+            case "DEFEND_BUFF" -> "防御并强化";
+            case "BUFF" -> "强化自身";
+            case "DEBUFF" -> "施加减益";
+            case "HEAL" -> "回复";
+            case "SPECIAL" -> "发动特殊行动";
+            default -> actor.intent().type();
+        };
     }
 
     /**

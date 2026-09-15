@@ -29,12 +29,13 @@ class PowerTest {
     }
 
     @Test
-    void increaseMaxHealthRaisesCapWithoutChangingCurrentHp() {
+    void increaseMaxHealthRaisesCapAndCurrentHp() {
         Player player = new Player(10, 3);
+        player.setHealth(7);
 
         player.increaseMaxHealth(2);
 
         assertEquals(12, player.getMaxHealth());
-        assertEquals(10, player.getHealth());
+        assertEquals(9, player.getHealth());
     }
 }

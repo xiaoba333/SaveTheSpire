@@ -1,6 +1,7 @@
 package com.roguelike.dungeon.game.reward;
 
 import com.roguelike.dungeon.game.card.Card;
+import com.roguelike.dungeon.game.entity.Relic;
 
 import java.util.HashSet;
 import java.util.List;
@@ -12,8 +13,9 @@ import java.util.Set;
  *
  * @param gold 金币奖励
  * @param cardChoices 可选择的卡牌定义，最多三张
+ * @param relic 可选的遗物奖励；为 null 表示本次不掉落遗物
  */
-public record BattleReward(int gold, List<Card> cardChoices) {
+public record BattleReward(int gold, List<Card> cardChoices, Relic relic) {
 
     public BattleReward {
         if (gold < 0) {
@@ -35,5 +37,15 @@ public record BattleReward(int gold, List<Card> cardChoices) {
                 throw new IllegalArgumentException("奖励卡牌定义重复: " + card.id());
             }
         }
+    }
+
+    /** 兼容旧调用：只有金币与卡牌、没有遗物的奖励。 */
+    public BattleReward(int gold, List<Card> cardChoices) {
+        this(gold, cardChoices, null);
+    }
+
+    /** 本次奖励是否包含遗物。 */
+    public boolean hasRelic() {
+        return relic != null;
     }
 }

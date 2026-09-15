@@ -3,10 +3,14 @@ package com.roguelike.dungeon.flow;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.CombatFactory;
 import com.roguelike.dungeon.game.battle.MonsterAi;
-import com.roguelike.dungeon.game.battle.MonsterAiService;
 import com.roguelike.dungeon.game.battle.MonsterCatalog;
+import com.roguelike.dungeon.game.blessing.BlessingActionResult;
+import com.roguelike.dungeon.game.blessing.BlessingOption;
+import com.roguelike.dungeon.game.blessing.BlessingService;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
+import com.roguelike.dungeon.game.card.CardLibrary;
+import com.roguelike.dungeon.game.card.CardRarity;
 import com.roguelike.dungeon.game.campfire.CampfireAction;
 import com.roguelike.dungeon.game.campfire.CampfireActionResult;
 import com.roguelike.dungeon.game.campfire.CampfireService;
@@ -14,10 +18,14 @@ import com.roguelike.dungeon.game.event.EventCatalog;
 import com.roguelike.dungeon.game.event.EventChoice;
 import com.roguelike.dungeon.game.event.EventChoiceResult;
 import com.roguelike.dungeon.game.event.EventService;
+import com.roguelike.dungeon.game.entity.Relic;
+import com.roguelike.dungeon.game.entity.RelicRarity;
 import com.roguelike.dungeon.game.event.GameEvent;
 import com.roguelike.dungeon.game.map.MapNode;
 import com.roguelike.dungeon.game.map.MapNodeType;
 import com.roguelike.dungeon.game.map.MapService;
+import com.roguelike.dungeon.game.relic.RelicLibrary;
+import com.roguelike.dungeon.game.relic.RelicService;
 import com.roguelike.dungeon.game.reward.BattleReward;
 import com.roguelike.dungeon.game.reward.RewardService;
 import com.roguelike.dungeon.game.run.RunState;
@@ -39,17 +47,21 @@ import java.util.function.Consumer;
 public final class GameController implements LevelFinishHandler {
     public static final int BATTLE_GOLD_REWARD = 20;
     public static final int ELITE_GOLD_REWARD = 35;
+    public static final int BOSS_GOLD_REWARD = 150;
 
     private final RunState runState;
     private final List<Card> rewardPool;
     private final Consumer<String> combatLogger;
+    /** 本局共享的遗物分发器：开局发放初始遗物，战斗与奖励都通过它结算。 */
+    private final RelicService relicService;
 
-    private GamePhase phase = GamePhase.MAP;
+    private GamePhase phase = GamePhase.BLESSING;
     private Combat currentCombat;
     private RewardService currentReward;
     private EventService currentEvent;
     private CampfireService currentCampfire;
     private ShopService currentShop;
+    private BlessingService currentBlessing;
 
     public GameController(
             RunState runState,
@@ -62,6 +74,32 @@ public final class GameController implements LevelFinishHandler {
                 card, "奖励卡池不能包含 null"));
         this.combatLogger = Objects.requireNonNull(
                 combatLogger, "战斗日志处理器不能为 null");
+        this.relicService = new RelicService(
+                this.runState.getPlayer(), this.combatLogger);
+        grantStartingRelics();
+        this.currentBlessing = new BlessingService(this.runState, blessingSeed());
+    }
+
+    /**
+     * 开局发放初始遗物。
+     *
+     * <p>每个遗物都是纯增益，目的是让开局有稳定战力，
+     * 避免「一件遗物都没有、被怪物两下打死」的体验。</p>
+     */
+    private void grantStartingRelics() {
+        for (Relic relic : RelicLibrary.createStarting()) {
+            relicService.acquire(relic);
+        }
+    }
+
+    /** 本局共享的遗物分发器，供界面或测试查询玩家持有的遗物。 */
+    public RelicService getRelicService() {
+        return relicService;
+    }
+
+    /** 玩家当前持有的遗物，按获得顺序。 */
+    public List<Relic> getRelics() {
+        return relicService.relics();
     }
 
     public GamePhase getPhase() {
@@ -112,7 +150,9 @@ public final class GameController implements LevelFinishHandler {
     /** 当前篝火可以选择锻造的永久牌组卡牌。 */
     public List<CardInstance> getCampfireUpgradeableCards() {
         return currentCampfire == null ? List.of() : currentCampfire.getUpgradeableCards();
-    /** 当前商店尚未售出的卡牌商品。 */
+    }
+
+    /** 当前商店尚未售出的商品（卡牌与遗物）。 */
     public List<ShopItem> getCurrentShopItems() {
         return currentShop == null ? List.of() : currentShop.getAvailableItems();
     }
@@ -126,6 +166,62 @@ public final class GameController implements LevelFinishHandler {
         return currentShop != null && currentShop.isCardRemovalUsed();
     }
 
+    /** 开局房间当前抽出的三个选项；领取后仍可查看。 */
+    public List<BlessingOption> getCurrentBlessingOptions() {
+        return currentBlessing == null ? List.of() : currentBlessing.getOptions();
+    }
+
+    /** 开局馈赠是否已经领取。领取后仍可回看房间，但不能再选。 */
+    public boolean isBlessingResolved() {
+        return currentBlessing != null && currentBlessing.isResolved();
+    }
+
+    /** 已领取的馈赠编号；尚未领取时为空。 */
+    public String getChosenBlessingOptionId() {
+        return currentBlessing == null ? "" : currentBlessing.chosenOptionId();
+    }
+
+    /** 领取结果说明；尚未领取时为空。 */
+    public String getBlessingResultMessage() {
+        return currentBlessing == null ? "" : currentBlessing.resultMessage();
+    }
+
+    /** 开局房间是否正在等待玩家指定一张牌。 */
+    public boolean isBlessingAwaitingCard() {
+        return currentBlessing != null && currentBlessing.isAwaitingCard();
+    }
+
+    /** 开局房间删卡或升级时可选的永久牌组卡牌。 */
+    public List<CardInstance> getBlessingTargetCards() {
+        return currentBlessing == null ? List.of() : currentBlessing.getTargetCards();
+    }
+
+    /** 选择一个开局馈赠。需要指定卡牌的选项会进入待选状态。 */
+    public BlessingActionResult chooseBlessing(String optionId) {
+        requirePhase(GamePhase.BLESSING);
+        BlessingActionResult result = currentBlessing.choose(optionId);
+        if (result.succeeded()) {
+            finishBlessing();
+        }
+        return result;
+    }
+
+    /** 为开局删卡或升级指定一张永久牌组中的牌。 */
+    public BlessingActionResult chooseBlessingCard(String cardInstanceId) {
+        requirePhase(GamePhase.BLESSING);
+        BlessingActionResult result = currentBlessing.chooseCard(cardInstanceId);
+        if (result.succeeded()) {
+            finishBlessing();
+        }
+        return result;
+    }
+
+    /** 取消开局房间的待选卡牌，回到三个选项。 */
+    public void cancelBlessingCardPick() {
+        requirePhase(GamePhase.BLESSING);
+        currentBlessing.cancelPending();
+    }
+
     /**
      * 在地图阶段选择一个可达节点，并进入对应关卡。
      */
@@ -135,9 +231,9 @@ public final class GameController implements LevelFinishHandler {
 
         switch (node.type()) {
             case BATTLE, ELITE, BOSS -> startBattle();
-case EVENT -> startEvent(node);
-case SHOP -> startShop(node);
-case REST -> startCampfire();
+            case EVENT -> startEvent(node);
+            case SHOP -> startShop(node);
+            case REST -> startCampfire();
         }
         return node;
     }
@@ -193,6 +289,8 @@ case REST -> startCampfire();
     public CampfireActionResult leaveCampfire() {
         requirePhase(GamePhase.REST);
         return currentCampfire.leave();
+    }
+
     /** 在当前商店购买卡牌。 */
     public ShopActionResult buyShopItem(String itemId) {
         requirePhase(GamePhase.SHOP);
@@ -220,7 +318,8 @@ case REST -> startCampfire();
                 combatLogger,
                 this,
                 runState::upgradeCard,
-                pickMonster(node));
+                pickMonster(node),
+                relicService);
     }
 
     private void startEvent(MapNode node) {
@@ -236,12 +335,18 @@ case REST -> startCampfire();
         currentCampfire = new CampfireService(runState, this);
     }
 
-    /** 按节点类型挑选怪物：普通战斗按种子挑一只轻松怪，精英走普通 AI，Boss 走 Boss AI。 */
+    /**
+     * 按节点类型挑选怪物；第二层暂与第一层共用同一图鉴。
+     *
+     * <p>普通战斗改为走<b>编队</b>池，因此会正常出现双怪遭遇
+     * （两条蛆、探险者二人组），玩家需要在战斗中选择先打哪一只。
+     * 精英与 Boss 暂时保持单怪，避免 Boss 蛋链的形态变换与多怪槽位耦合。</p>
+     */
     private MonsterAi pickMonster(MapNode node) {
         return switch (node.type()) {
-            case BATTLE -> MonsterCatalog.randomEasy(rewardSeed(node));
-            case ELITE -> MonsterAiService.regular();
-            case BOSS -> MonsterAiService.boss();
+            case BATTLE -> MonsterCatalog.randomEncounter(rewardSeed(node));
+            case ELITE -> MonsterCatalog.elite();
+            case BOSS -> MonsterCatalog.boss(runState.shouldSmashAlmostCrackedEgg());
             default -> throw new IllegalStateException(
                     "非战斗节点无法选取怪物: " + node.type());
         };
@@ -253,7 +358,8 @@ case REST -> startCampfire();
                 runState,
                 rewardPool,
                 shopSeed(node),
-                this);
+                this,
+                relicService);
     }
 
     private void finishBattle(LevelResult result) {
@@ -262,33 +368,38 @@ case REST -> startCampfire();
             return;
         }
 
+        runState.getPlayer().onBattleEnd();
+
         MapNode node = requireCurrentNode();
-        if (node.type() == MapNodeType.BOSS) {
-            currentCombat = null;
-            getMapService().completeCurrentNode();
-            if (runState.hasNextAct()) {
-                runState.advanceAct();
-                phase = GamePhase.MAP;
-            } else {
-                phase = GamePhase.VICTORY;
-            }
-            return;
-        }
-
-        if (node.type() != MapNodeType.BATTLE && node.type() != MapNodeType.ELITE) {
-            throw new IllegalStateException("非战斗节点进入了战斗结算: " + node.type());
-        }
-
-        int gold = node.type() == MapNodeType.ELITE
-                ? ELITE_GOLD_REWARD
-                : BATTLE_GOLD_REWARD;
-        currentReward = new RewardService(
-                runState,
-                rewardPool,
-                rewardSeed(node),
-                gold);
+        currentReward = createBattleReward(node);
         currentCombat = null;
         phase = GamePhase.REWARD;
+    }
+
+    private RewardService createBattleReward(MapNode node) {
+        return switch (node.type()) {
+            case BOSS -> new RewardService(
+                    runState,
+                    CardLibrary.ofRarity(rewardPool, CardRarity.RARE),
+                    rewardSeed(node),
+                    BOSS_GOLD_REWARD,
+                    relicService,
+                    RelicLibrary.create(RelicLibrary.TOWER_KEY));
+            case ELITE -> new RewardService(
+                    runState,
+                    rewardPool,
+                    rewardSeed(node),
+                    ELITE_GOLD_REWARD,
+                    relicService,
+                    RelicRarity.COMMON, RelicRarity.UNCOMMON, RelicRarity.RARE);
+            case BATTLE -> new RewardService(
+                    runState,
+                    rewardPool,
+                    rewardSeed(node),
+                    BATTLE_GOLD_REWARD);
+            default -> throw new IllegalStateException(
+                    "非战斗节点进入了战斗结算: " + node.type());
+        };
     }
 
     private void finishNonBattleLevel(LevelResult result) {
@@ -303,9 +414,28 @@ case REST -> startCampfire();
         phase = GamePhase.MAP;
     }
 
+    private void finishBlessing() {
+        phase = GamePhase.MAP;
+    }
+
+    private long blessingSeed() {
+        return runState.getRunSeed() ^ 0xB1E5510C00L;
+    }
+
     private void finishReward() {
+        MapNode node = requireCurrentNode();
+        boolean boss = node.type() == MapNodeType.BOSS;
         getMapService().completeCurrentNode();
         currentReward = null;
+        if (boss) {
+            if (runState.hasNextAct()) {
+                runState.advanceAct();
+                phase = GamePhase.MAP;
+            } else {
+                phase = GamePhase.VICTORY;
+            }
+            return;
+        }
         phase = GamePhase.MAP;
     }
 
@@ -320,13 +450,13 @@ case REST -> startCampfire();
         return seed * 31 + node.id();
     }
 
-private long eventSeed(MapNode node) {
-    return rewardSeed(node) ^ 0xC64A7935BD1E995L;
-}
+    private long eventSeed(MapNode node) {
+        return rewardSeed(node) ^ 0xC64A7935BD1E995L;
+    }
 
-private long shopSeed(MapNode node) {
-    return rewardSeed(node) ^ 0x5DEECE66DL;
-}
+    private long shopSeed(MapNode node) {
+        return rewardSeed(node) ^ 0x5DEECE66DL;
+    }
 
     private void requirePhase(GamePhase expected) {
         if (phase != expected) {

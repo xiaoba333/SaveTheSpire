@@ -37,7 +37,7 @@ class CardEffectTest {
     @Test
     void feastKillsAndGrantsMaxHp() {
         Player player = new Player(50, 3);
-        List<CardInstance> deck = List.of(new CardInstance("f1", CardLibrary.BLOOD_FEAST));
+        List<CardInstance> deck = List.of(new CardInstance("f1", CardLibrary.FEAST));
         Combat combat = combatWith(player, deck, new DefaultMonsterAi("木桩", 5, 1, 0));
 
         combat.playCard(0);
@@ -51,7 +51,7 @@ class CardEffectTest {
     void hemokinesisDealsTwoToSelfAndTwelveToMonster() {
         Player player = new Player(20, 3);
         player.setHealth(12);
-        List<CardInstance> deck = List.of(new CardInstance("d1", CardLibrary.BLOOD_DEVOTION_STRIKE));
+        List<CardInstance> deck = List.of(new CardInstance("d1", CardLibrary.SACRIFICE_STRIKE));
         Combat combat = combatWith(player, deck, new DefaultMonsterAi("木桩", 100, 0, 0));
 
         combat.playCard(0);
@@ -62,7 +62,7 @@ class CardEffectTest {
 
     @Test
     void upgradedHemokinesisDealsTwoToSelfAndSixteenToMonster() {
-        CardInstance upgraded = new CardInstance("d1", CardLibrary.BLOOD_DEVOTION_STRIKE, true);
+        CardInstance upgraded = new CardInstance("d1", CardLibrary.SACRIFICE_STRIKE, true);
         assertEquals(1, upgraded.effectiveCost());
         Player player = new Player(20, 3);
         player.setHealth(12);
@@ -77,7 +77,7 @@ class CardEffectTest {
 
     @Test
     void upgradedBloodAttackDealsNineAndKeepsCost() {
-        CardInstance upgraded = new CardInstance("a1", CardLibrary.BLOOD_ATTACK, true);
+        CardInstance upgraded = new CardInstance("a1", CardLibrary.STRIKE, true);
         assertEquals(1, upgraded.effectiveCost());
 
         Player player = new Player(50, 3);

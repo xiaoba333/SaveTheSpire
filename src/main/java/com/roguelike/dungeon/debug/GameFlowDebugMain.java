@@ -6,6 +6,9 @@ import com.roguelike.dungeon.flow.LevelResult;
 import com.roguelike.dungeon.flow.MenuController;
 import com.roguelike.dungeon.game.battle.Combat;
 import com.roguelike.dungeon.game.battle.PlayCardResult;
+import com.roguelike.dungeon.game.blessing.BlessingActionResult;
+import com.roguelike.dungeon.game.blessing.BlessingOption;
+import com.roguelike.dungeon.game.blessing.BlessingService;
 import com.roguelike.dungeon.game.card.Card;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
@@ -33,24 +36,11 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * 可在 IntelliJ 控制台中运行的纯文字游戏流程。
  *
- * <p>这只是调试入口，不参与核心规则，未来 Unity 可以直接调用
- * 同一个 {@link GameController}。</p>
+ * <p>这只是调试入口，不参与核心规则。图形界面请运行 {@code FlowApp}，
+ * 它调用同一个 {@link GameController}。</p>
  */
 public final class GameFlowDebugMain {
-    private static final int DEFAULT_ACT_COUNT = 1;
-    private static final List<Card> REWARD_POOL = List.of(
-            CardLibrary.BASH,
-            CardLibrary.QUICK_SLASH,
-            CardLibrary.HEAVY_STRIKE,
-            CardLibrary.IRON_WAVE,
-            CardLibrary.SHRUG_IT_OFF,
-            CardLibrary.BLOODLETTING,
-            CardLibrary.BLOOD_BURST,
-            CardLibrary.BLOOD_LORD,
-            CardLibrary.BLOOD_SACRIFICE,
-            CardLibrary.BLOOD_TRANSFUSION,
-            CardLibrary.FEAST,
-            CardLibrary.SACRIFICE_STRIKE);
+    private static final int DEFAULT_ACT_COUNT = 2;
 
     private final Scanner scanner;
     private final GameController controller;
@@ -86,7 +76,7 @@ public final class GameFlowDebugMain {
 
                 GameController controller = new GameController(
                         runState,
-                        REWARD_POOL,
+                        CardLibrary.rewardPoolFor(character.rewardCardIds()),
                         line -> System.out.println("[战斗] " + line));
                 new GameFlowDebugMain(scanner, controller).run();
             }
@@ -129,15 +119,14 @@ public final class GameFlowDebugMain {
     private void run() {
         while (running) {
             switch (controller.getPhase()) {
+                case BLESSING -> handleBlessing();
                 case MAP -> handleMap();
                 case BATTLE -> handleBattle();
                 case REWARD -> handleReward();
 
                 case EVENT -> handleEvent();
                 case REST -> handleCampfire();
-               
                 case SHOP -> handleShop();
-            
                 case VICTORY -> {
                     printRunSummary("恭喜通关！");
                     running = false;
@@ -147,6 +136,77 @@ public final class GameFlowDebugMain {
                     running = false;
                 }
             }
+        }
+    }
+
+    private void handleBlessing() {
+        while (running && controller.getPhase() == GamePhase.BLESSING) {
+            if (controller.isBlessingAwaitingCard()) {
+                chooseBlessingCard();
+                continue;
+            }
+            List<BlessingOption> options = controller.getCurrentBlessingOptions();
+            System.out.println("\n=== " + BlessingService.TITLE + " ===");
+            System.out.println(BlessingService.DESCRIPTION);
+            for (int i = 0; i < options.size(); i++) {
+                BlessingOption option = options.get(i);
+                System.out.println("  " + i + " - " + option.label()
+                        + " | " + option.description()
+                        + (option.available()
+                        ? ""
+                        : "（不可选：" + option.unavailableReason() + "）"));
+            }
+            String input = readLine("请输入馈赠编号：");
+            if (!running) {
+                return;
+            }
+            try {
+                int index = Integer.parseInt(input);
+                if (index < 0 || index >= options.size()) {
+                    System.out.println("馈赠编号超出范围。");
+                    continue;
+                }
+                BlessingActionResult result = controller.chooseBlessing(
+                        options.get(index).id());
+                System.out.println(result.message());
+            } catch (NumberFormatException exception) {
+                System.out.println("请输入整数馈赠编号。");
+            }
+        }
+    }
+
+    private void chooseBlessingCard() {
+        List<CardInstance> cards = controller.getBlessingTargetCards();
+        if (cards.isEmpty()) {
+            controller.cancelBlessingCardPick();
+            System.out.println("没有可选卡牌，已返回选项。");
+            return;
+        }
+        System.out.println("可选卡牌：");
+        for (int i = 0; i < cards.size(); i++) {
+            CardInstance card = cards.get(i);
+            System.out.println("  " + i + " - " + card.displayName()
+                    + " | " + card.displayDescription());
+        }
+        String input = readLine("请输入卡牌编号（或 back 返回）：");
+        if (!running) {
+            return;
+        }
+        if (input.equalsIgnoreCase("back")) {
+            controller.cancelBlessingCardPick();
+            return;
+        }
+        try {
+            int index = Integer.parseInt(input);
+            if (index < 0 || index >= cards.size()) {
+                System.out.println("卡牌编号超出范围。");
+                return;
+            }
+            BlessingActionResult result = controller.chooseBlessingCard(
+                    cards.get(index).id());
+            System.out.println(result.message());
+        } catch (NumberFormatException exception) {
+            System.out.println("请输入整数卡牌编号。");
         }
     }
 
@@ -164,8 +224,12 @@ public final class GameFlowDebugMain {
             System.out.println("  " + node.id() + " - " + typeName(node));
         }
 
-        String input = readLine("请输入节点编号：");
+        String input = readLine("请输入节点编号（或 back 回看开局房间）：");
         if (!running) {
+            return;
+        }
+        if (input.equalsIgnoreCase("back")) {
+            printResolvedBlessing();
             return;
         }
         try {
@@ -175,6 +239,20 @@ public final class GameFlowDebugMain {
             System.out.println("请输入整数节点编号。");
         } catch (IllegalArgumentException | IllegalStateException exception) {
             System.out.println("无法进入节点：" + exception.getMessage());
+        }
+    }
+
+    private void printResolvedBlessing() {
+        System.out.println("\n=== " + BlessingService.TITLE + "（已领取，不能重选）===");
+        System.out.println(BlessingService.DESCRIPTION);
+        String chosenId = controller.getChosenBlessingOptionId();
+        for (BlessingOption option : controller.getCurrentBlessingOptions()) {
+            String mark = option.id().equals(chosenId) ? " ★已带走" : "";
+            System.out.println("  - " + option.label()
+                    + " | " + option.description() + mark);
+        }
+        if (!controller.getBlessingResultMessage().isBlank()) {
+            System.out.println(controller.getBlessingResultMessage());
         }
     }
 
@@ -203,6 +281,11 @@ public final class GameFlowDebugMain {
         BattleReward reward = controller.getCurrentReward().orElseThrow();
         System.out.println("\n=== 战斗奖励 ===");
         System.out.println("金币：" + reward.gold());
+        if (reward.hasRelic()) {
+            System.out.println("遗物：" + reward.relic().name()
+                    + "（" + reward.relic().rarity().displayName() + "）"
+                    + " | " + reward.relic().description());
+        }
         if (reward.cardChoices().isEmpty()) {
             System.out.println("本次没有可选卡牌，输入 skip 领取金币。");
         } else {
@@ -373,11 +456,12 @@ public final class GameFlowDebugMain {
 
             System.out.println("\n=== 商店 ===");
             System.out.println("当前金币：" + state.getGold());
-            System.out.println("卡牌商品（每张 " + ShopService.CARD_PRICE + " 金币）：");
+            System.out.println("商品（卡牌 " + ShopService.CARD_PRICE
+                    + " 金币 / 遗物 " + ShopService.RELIC_PRICE + " 金币）：");
             for (int i = 0; i < items.size(); i++) {
                 ShopItem item = items.get(i);
-                System.out.println("  " + i + " - " + item.card().label()
-                        + " | " + item.card().description());
+                System.out.println("  " + i + " - " + item.displayLabel()
+                        + " | " + item.displayDescription());
             }
             if (items.isEmpty()) {
                 System.out.println("  （已售罄）");
@@ -418,7 +502,7 @@ public final class GameFlowDebugMain {
             ShopItem item = items.get(index);
             ShopActionResult result = controller.buyShopItem(item.id());
             System.out.println(result == ShopActionResult.SUCCESS
-                    ? "购买成功：" + item.card().name()
+                    ? "购买成功：" + item.displayName()
                     : "购买失败：" + shopResultText(result));
         } catch (NumberFormatException exception) {
             System.out.println("用法：buy <商品编号>，例如 buy 0");
@@ -515,6 +599,13 @@ public final class GameFlowDebugMain {
         System.out.println("牌堆：抽牌 " + combat.getDrawPileSize()
                 + " / 弃牌 " + combat.getDiscardPileSize()
                 + " / 消耗 " + combat.getExhaustPileSize());
+        if (!combat.getRelics().isEmpty()) {
+            System.out.println("遗物：");
+            combat.getRelics().forEach(relic ->
+                    System.out.println("  - " + relic.name()
+                            + "（" + relic.rarity().displayName() + "）"
+                            + " | " + relic.description()));
+        }
     }
 
     private void printRunSummary(String title) {

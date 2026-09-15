@@ -8,6 +8,9 @@ import java.util.Objects;
  *
  * <p>只承载角色数据，不负责创建 {@code Player}、卡牌实例或 {@code RunState}——
  * 那是菜单 / 选角流程（Mg）的职责。角色负责人（王佳一）负责提供本数据。</p>
+ *
+ * @param rewardCardIds 该角色专属奖励/商店卡池（不含公共无色牌）
+ * @param startingRelicId 初始遗物编号；空字符串表示没有初始遗物
  */
 public record CharacterDefinition(
         String id,
@@ -16,7 +19,9 @@ public record CharacterDefinition(
         int maxHealth,
         int maxEnergy,
         int startingGold,
-        List<String> startingCardIds) {
+        List<String> startingCardIds,
+        List<String> rewardCardIds,
+        String startingRelicId) {
 
     public CharacterDefinition {
         Objects.requireNonNull(id, "角色编号不能为 null");
@@ -34,15 +39,21 @@ public record CharacterDefinition(
         if (startingGold < 0) {
             throw new IllegalArgumentException("初始金币不能为负数");
         }
-        startingCardIds = List.copyOf(Objects.requireNonNull(
-                startingCardIds, "起始牌组不能为 null"));
+        startingCardIds = copyCardIds(startingCardIds, "起始牌组");
         if (startingCardIds.isEmpty()) {
             throw new IllegalArgumentException("起始牌组不能为空");
         }
-        for (String cardId : startingCardIds) {
+        rewardCardIds = copyCardIds(rewardCardIds, "奖励卡池");
+        startingRelicId = startingRelicId == null ? "" : startingRelicId;
+    }
+
+    private static List<String> copyCardIds(List<String> cardIds, String label) {
+        List<String> copied = List.copyOf(Objects.requireNonNull(cardIds, label + "不能为 null"));
+        for (String cardId : copied) {
             if (cardId == null || cardId.isBlank()) {
-                throw new IllegalArgumentException("起始牌组不能包含空的卡牌 ID");
+                throw new IllegalArgumentException(label + "不能包含空的卡牌 ID");
             }
         }
+        return copied;
     }
 }

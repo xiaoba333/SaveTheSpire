@@ -15,7 +15,8 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
     private int health;
     private int armor;
 
-    private final int maxEnergy;
+    /** 每回合能量上限。可被遗物永久提升，因此不是 final。 */
+    private int maxEnergy;
     private int energy;
 
     private final Map<StatusEffect, Integer> statuses = new EnumMap<>(StatusEffect.class);
@@ -118,6 +119,22 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         return maxEnergy;
     }
 
+    /**
+     * 提升每回合能量上限（永久，直到本局结束）。
+     *
+     * <p>提升后当回合立刻受益：当前能量同步加满到新上限，
+     * 否则在回合开始阶段提升上限会看不到效果。</p>
+     *
+     * @param amount 提升量，amount &lt;= 0 时忽略
+     */
+    public void addMaxEnergy(int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        maxEnergy += amount;
+        energy = Math.min(energy + amount, maxEnergy);
+    }
+
     @Override
     public void setEnergy(int energy) {
         this.energy = clamp(energy, 0, maxEnergy);
@@ -213,6 +230,14 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         return relics.contains(relic);
     }
 
+    /** 是否持有指定编号的遗物（按 id 比较），用于防止重复获取。 */
+    public boolean hasRelicById(String relicId) {
+        if (relicId == null || relicId.isBlank()) {
+            return false;
+        }
+        return relics.stream().anyMatch(relic -> relicId.equals(relic.id()));
+    }
+
     /** 当前持有的全部遗物。 */
     public List<Relic> getRelics() {
         return List.copyOf(relics);
@@ -227,21 +252,34 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         }
     }
 
+    /**
+     * 战斗胜利结束时结算所有遗物效果（由 GameController 调用）。
+     */
+    public void onBattleEnd() {
+        for (Relic relic : relics) {
+            relic.onBattleEnd(this);
+        }
+    }
+
     /** 降低最大生命值（下限 1 点），并把当前生命夹到新上限内。 */
     public void reduceMaxHealth(int amount) {
         if (amount <= 0) {
+            return;
+        }
+        if (triggerMaxHealthReduced(amount)) {
             return;
         }
         maxHealth = Math.max(1, maxHealth - amount);
         health = Math.min(health, maxHealth);
     }
 
-    /** 提高最大生命值；当前生命不随之恢复。amount <= 0 时忽略。 */
+    /** 提高最大生命值，并同步恢复等量当前生命（不超过新上限）。amount <= 0 时忽略。 */
     public void increaseMaxHealth(int amount) {
         if (amount <= 0) {
             return;
         }
         maxHealth += amount;
+        heal(amount);
     }
 
     /** 回满生命到当前最大生命值。 */
@@ -268,6 +306,23 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         for (Power power : powers) {
             power.onTurnStart(this);
         }
+    }
+
+    /** 玩家对自己造成实际伤害后，触发相关能力。 */
+    public void triggerSelfDamage(int damage) {
+        for (Power power : powers) {
+            power.onSelfDamage(this, damage);
+        }
+    }
+
+    /** 最大生命值即将下降时询问能力是否接管。 */
+    private boolean triggerMaxHealthReduced(int amount) {
+        for (Power power : powers) {
+            if (power.onMaxHealthReduced(this, amount)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 清空全部能力（每场战斗开始时调用，能力不跨战斗保留）。 */
@@ -311,6 +366,7 @@ public class Player implements IHealth, IArmor, IEnergy, IStatus {
         if (baseDamage <= 0) {
             return 0;
         }
+        baseDamage += getStacks(StatusEffect.STRENGTH);
         if (hasStatus(StatusEffect.WEAK)) {
             return baseDamage * 3 / 4;  // 虚弱：造成的伤害只有 75%
         }

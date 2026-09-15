@@ -24,4 +24,22 @@ public interface Power {
      */
     default void onTurnStart(Player player) {
     }
+
+    /**
+     * 玩家对自己造成伤害时触发。
+     *
+     * @param player 玩家实体
+     * @param damage 实际造成的自伤
+     */
+    default void onSelfDamage(Player player, int damage) {
+    }
+
+    /**
+     * 玩家最大生命值即将下降时触发。
+     *
+     * @return true 表示该能力已经接管本次下降，调用方不应再执行默认扣减
+     */
+    default boolean onMaxHealthReduced(Player player, int amount) {
+        return false;
+    }
 }

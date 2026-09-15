@@ -4,6 +4,7 @@ import com.roguelike.dungeon.flow.LevelFinishHandler;
 import com.roguelike.dungeon.game.card.CardInstance;
 import com.roguelike.dungeon.game.card.CardLibrary;
 import com.roguelike.dungeon.game.entity.Player;
+import com.roguelike.dungeon.game.relic.RelicService;
 
 import java.util.List;
 import java.util.UUID;
@@ -39,6 +40,24 @@ public final class CombatFactory {
                 result -> { });
     }
 
+    /**
+     * HTTP 独立战斗的演示战斗，并指定出场编队。
+     *
+     * <p>前端联调「多敌人 + 选择目标」时用它开一场 {@code act1_grubs}
+     * 或 {@code act1_explorers}，不必走完整地图流程。</p>
+     *
+     * @param monsterAi 编队（通常来自 {@code MonsterCatalog.encounter(...)}）
+     */
+    public static Combat createHttpDemo(Consumer<String> logger, MonsterAi monsterAi) {
+        return new Combat(
+                new Player(Combat.PLAYER_MAX_HP, Combat.PLAYER_MAX_ENERGY),
+                forgeDemoDeck(),
+                logger,
+                result -> { },
+                upgradedCard -> { },
+                monsterAi);
+    }
+
     /** 与本局 RunState 共享玩家和牌组的战斗。 */
     public static Combat create(
             Player player,
@@ -69,11 +88,32 @@ public final class CombatFactory {
             LevelFinishHandler finishHandler,
             Consumer<CardInstance> cardUpgradeHandler,
             MonsterAi monsterAi) {
-        return new Combat(
-                player, battleDeck, logger, finishHandler, cardUpgradeHandler, monsterAi);
+        return createForNode(
+                player, battleDeck, logger, finishHandler,
+                cardUpgradeHandler, monsterAi, null);
     }
 
-    /** 起始牌组：5 打击 + 5 防御，每张独立实例 id。 */
+    /**
+     * 同上，并接入本局的遗物分发器。
+     *
+     * <p>传入 {@code relicService} 后，战斗会在各触发点自动结算玩家持有的遗物。</p>
+     *
+     * @param relicService 本局共享的遗物分发器；传 null 表示本场不结算遗物
+     */
+    public static Combat createForNode(
+            Player player,
+            List<CardInstance> battleDeck,
+            Consumer<String> logger,
+            LevelFinishHandler finishHandler,
+            Consumer<CardInstance> cardUpgradeHandler,
+            MonsterAi monsterAi,
+            RelicService relicService) {
+        return new Combat(
+                player, battleDeck, logger, finishHandler,
+                cardUpgradeHandler, monsterAi, relicService);
+    }
+
+    /** 起始牌组：4 打击 + 4 防御 + 1 痛击，每张独立实例 id。 */
     public static List<CardInstance> defaultDeck() {
         return CardLibrary.startingDeck().stream()
                 .map(card -> new CardInstance(UUID.randomUUID().toString(), card))
